@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">TwoPhoneSupporter</string>
+    <string name="service_name">Notification Service</string>
+</resources>
