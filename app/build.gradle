@@ -45,6 +45,12 @@ dependencies {
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 
+    if (project.hasProperty('LOCAL_ALGORIGO_BLE')) {
+        implementation project(':algorigoble2')
+    } else {
+        implementation 'com.algorigo.rx:algorigoble2:2.3.1'
+    }
+
     // AlgorigoUtil
     if (project.hasProperty('LOCAL_ALOGORIGO_UTILS')) {
         implementation project(':algorigoutil')
@@ -57,5 +63,8 @@ dependencies {
     implementation 'io.reactivex.rxjava3:rxandroid:3.0.0'
     // RxRelay
     implementation 'com.jakewharton.rxrelay3:rxrelay:3.0.1'
+
+    // RxPermissions
+    implementation 'com.github.tbruyelle:rxpermissions:0.12'
 
 }
