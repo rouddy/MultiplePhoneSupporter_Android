@@ -26,13 +26,13 @@ object BleAdvertiser {
         val advertiseCallback = object : AdvertiseCallback() {
             override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
                 super.onStartSuccess(settingsInEffect)
-                Log.e("!!!", "AdvertiseCallback::onStartSuccess")
+                Log.e("$$$", "AdvertiseCallback::onStartSuccess")
                 connectedSubject.onNext(bluetoothLeAdvertiser!!)
             }
 
             override fun onStartFailure(errorCode: Int) {
                 super.onStartFailure(errorCode)
-                Log.e("!!!", "AdvertiseCallback::onStartFailure:$errorCode")
+                Log.e("$$$", "AdvertiseCallback::onStartFailure:$errorCode")
                 connectedSubject.onError(RuntimeException("Failure:$errorCode"))
             }
         }
@@ -45,8 +45,8 @@ object BleAdvertiser {
             val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
             val bluetoothAdapter = bluetoothManager.adapter
 
-            val isNameChanged = bluetoothAdapter.setName("Test")
-            Log.e("!!!", "BleAdvertiseObservable::isNameChanged:$isNameChanged")
+//            val isNameChanged = bluetoothAdapter.setName("Test")
+//            Log.e("$$$", "BleAdvertiseObservable::isNameChanged:$isNameChanged")
 
             bluetoothLeAdvertiser = bluetoothAdapter.bluetoothLeAdvertiser
             val settings = AdvertiseSettings
@@ -59,13 +59,13 @@ object BleAdvertiser {
 
             val data = AdvertiseData
                 .Builder()
-                .setIncludeDeviceName(true)
+                .setIncludeDeviceName(false)
                 .setIncludeTxPowerLevel(false)
-                .addServiceUuid(ParcelUuid(MyNotificationListenerService.SERVICE_UUID))
+                .addServiceUuid(ParcelUuid(MyGattDelegate.SERVICE_UUID))
                 .build()
 
             bluetoothLeAdvertiser!!.startAdvertising(settings, data, advertiseCallback)
-            Log.e("!!!", "BleAdvertiseObservable startAdvertising")
+            Log.e("$$$", "BleAdvertiseObservable startAdvertising")
         }
             .subscribeOn(Schedulers.io())
             .andThen(connectedSubject)

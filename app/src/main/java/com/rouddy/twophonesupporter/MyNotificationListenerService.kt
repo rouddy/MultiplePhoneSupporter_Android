@@ -10,10 +10,10 @@ import android.util.Log
 import com.algorigo.library.rx.Rx2ServiceBindingFactory
 import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Observable
+import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.disposables.Disposable
 import io.reactivex.rxjava3.subjects.PublishSubject
 import io.reactivex.rxjava3.subjects.Subject
-import java.util.*
 
 class MyNotificationListenerService : NotificationListenerService() {
 
@@ -24,21 +24,18 @@ class MyNotificationListenerService : NotificationListenerService() {
     }
 
     private val binder = ServiceBinder()
-    private var disposable: Disposable? = null
 
-    private val gattDelegate = object : BleGattServiceGenerator.GattDelegate {
-        override fun getReadResponse(uuid: UUID): ByteArray {
-            return byteArrayOf(0x01, 0x02)
-        }
+    private val gattDelegate = MyGattDelegate()
 
-        override fun getWriteResponse(uuid: UUID, data: ByteArray): ByteArray {
-            return data
-        }
-    }
+    private var peripheralDisposable: Disposable? = null
 
     override fun onCreate() {
-        Log.e("!!!", "MyNotificationListenerService::onCreate")
+        Log.e("$$$", "MyNotificationListenerService::onCreate")
         super.onCreate()
+
+        if (getActAsPeripheralStarted() && peripheralDisposable == null) {
+            startBluetooth()
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? {
@@ -46,96 +43,96 @@ class MyNotificationListenerService : NotificationListenerService() {
     }
 
     override fun onDestroy() {
-        Log.e("!!!", "MyNotificationListenerService::onDestroy")
+        Log.e("$$$", "MyNotificationListenerService::onDestroy")
         super.onDestroy()
     }
 
-    fun start(): Completable {
+    fun checkPeripheralStarted(): Single<Boolean> {
+        return Single.fromCallable { peripheralDisposable != null }
+    }
+
+    fun startPeripheral(): Completable {
         val subject = PublishSubject.create<Any>()
         return subject.ignoreElements()
             .doOnSubscribe {
                 startBluetooth(subject)
             }
+            .doOnComplete {
+                setActAsPeripheralStarted(true)
+            }
     }
 
-    private fun startBluetooth(subject: Subject<Any>) {
-        if (disposable != null) {
-            subject.onComplete()
+    private fun startBluetooth(subject: Subject<Any>? = null) {
+        if (peripheralDisposable != null) {
+            subject?.onComplete()
             return
         }
 
-        disposable = BleGattServiceGenerator
+        Log.e("$$$", "startBluetooth")
+        peripheralDisposable = BleGattServiceGenerator
             .startServer(this, gattDelegate)
             .flatMap {
                 BleAdvertiser
                     .startAdvertising(this)
             }
             .doFinally {
-                disposable = null
+                peripheralDisposable = null
+                Log.e("$$$", "startBluetooth doFinally")
             }
             .subscribe({
-                if (!subject.hasComplete()) {
+                if (subject?.hasComplete() == false) {
                     subject.onComplete()
                 }
             }, {
-                Log.e("!!!", "start bluetooth error", it)
-                if (!subject.hasComplete()) {
+                Log.e("$$$", "start bluetooth error", it)
+                if (subject?.hasComplete() == false) {
                     subject.onError(it)
                 }
             })
     }
 
-    fun stop(): Completable {
+    fun stopPeripheral(): Completable {
         return Completable.fromCallable {
-            disposable?.dispose()
+            peripheralDisposable?.dispose()
+            setActAsPeripheralStarted(false)
         }
     }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        Log.e("!!!", "NotificationListenerService::onListenerConnected")
+        Log.e("$$$", "NotificationListenerService::onListenerConnected")
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
-        Log.e("!!!", "NotificationListenerService::onListenerDisconnected")
+        Log.e("$$$", "NotificationListenerService::onListenerDisconnected")
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
-        Log.e("!!!", "NotificationListenerService::onNotificationPosted:$sbn")
+        Log.e("$$$", "NotificationListenerService::onNotificationPosted:$sbn")
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         super.onNotificationRemoved(sbn)
-        Log.e("!!!", "NotificationListenerService::onNotificationRemoved:$sbn")
+        Log.e("$$$", "NotificationListenerService::onNotificationRemoved:$sbn")
+    }
+
+    private fun setActAsPeripheralStarted(started: Boolean) {
+        getSharedPreferences(SHARED_PREFERENCE_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .apply {
+                putBoolean(KEY_ACT_AS_PERIPHERAL_STARTED, started)
+            }
+            .apply()
+    }
+
+    private fun getActAsPeripheralStarted(): Boolean {
+        return getSharedPreferences(SHARED_PREFERENCE_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_ACT_AS_PERIPHERAL_STARTED, false)
     }
 
     companion object {
-        internal val SERVICE_UUID = UUID.fromString("6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
-        internal val CHARACTERISTIC_UUID = UUID.fromString("6E400002-B5A3-F393-E0A9-E50E24DCCA9E")
-
-        internal val UUID_DEVICE_INFO_SERVICE = UUID.fromString("0000180A-0000-1000-8000-00805F9B34FB")
-        internal val UUID_MANUFACTURER_NAME = UUID.fromString("00002A29-0000-1000-8000-00805F9B34FB")
-        internal val UUID_HARDWARE_REVISION = UUID.fromString("00002A27-0000-1000-8000-00805F9B34FB")
-        internal val UUID_FIRMWARE_REVISION = UUID.fromString("00002A26-0000-1000-8000-00805F9B34FB")
-
-        internal val UUID_GENERIC_ACCESS_SERVICE = UUID.fromString("00001800-0000-1000-8000-00805F9B34FB")
-        internal val UUID_DEVICE_NAME = UUID.fromString("00002A00-0000-1000-8000-00805F9B34FB")
-        internal val UUID_APPEARANCE = UUID.fromString("00002A01-0000-1000-8000-00805F9B34FB")
-        internal val UUID_PERIPHERAL_PREFERRED = UUID.fromString("00002A04-0000-1000-8000-00805F9B34FB")
-        internal val UUID_CENTRAL_ADDRESS_RESOL = UUID.fromString("00002AA6-0000-1000-8000-00805F9B34FB")
-
-        internal val UUID_GENERIC_ATTRIBUTE_SERVICE = UUID.fromString("00001801-0000-1000-8000-00805F9B34FB")
-        internal val UUID_SERVICE_CHANGED = UUID.fromString("00002A05-0000-1000-8000-00805F9B34FB")
-
-        internal val UUID_BOND_MANAGEMENT_SERVICE = UUID.fromString("0000181E-0000-1000-8000-00805F9B34FB")
-        internal val UUID_BOND_MANAGEMENT_FEATURE = UUID.fromString("00002AA5-0000-1000-8000-00805F9B34FB")
-        internal val UUID_BOND_MANAGEMENT_CONTROL = UUID.fromString("00002AA4-0000-1000-8000-00805F9B34FB")
-
-        internal val UUID_BATTERY_SERVICE = UUID.fromString("0000180F-0000-1000-8000-00805F9B34FB")
-        internal val UUID_BATTERY_LEVEL = UUID.fromString("00002A19-0000-1000-8000-00805F9B34FB")
-
         fun bindService(context: Context): Observable<MyNotificationListenerService> {
             return Rx2ServiceBindingFactory
                 .bind<MyNotificationListenerService.ServiceBinder>(
@@ -144,5 +141,8 @@ class MyNotificationListenerService : NotificationListenerService() {
                 )
                 .map { it.getService() }
         }
+
+        private const val SHARED_PREFERENCE_NAME = "MyNotificationListenerServiceSP"
+        private const val KEY_ACT_AS_PERIPHERAL_STARTED = "KeyActAsPeripheralStarted"
     }
 }
