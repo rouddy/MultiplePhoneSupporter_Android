@@ -9,6 +9,7 @@ import android.os.Build
 import android.util.Log
 import com.algorigo.library.toByteArray
 import com.jakewharton.rxrelay3.BehaviorRelay
+import com.jakewharton.rxrelay3.PublishRelay
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.disposables.Disposable
 import io.reactivex.rxjava3.schedulers.Schedulers
@@ -19,7 +20,8 @@ import java.util.concurrent.TimeUnit
 class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
 
     private var disposable: Disposable? = null
-    private var notificationRelay = BehaviorRelay.create<Any>().apply { accept(1) }
+    private var nextNotificationRelay: BehaviorRelay<Any>? = null
+    val notificationRelay = PublishRelay.create<ByteArray>()
 
     override fun getCharacteris(): List<BluetoothGattCharacteristic> {
         return listOf(
@@ -45,15 +47,28 @@ class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
     }
 
     override fun startNotification(notificationType: BleGattServiceGenerator.NotificationType, device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, gattServer: BluetoothGattServer) {
-        disposable = Observable.interval(5, TimeUnit.SECONDS)
-            .sample(notificationRelay)
+        val relay = BehaviorRelay.create<Any>().apply { accept(1) }
+        nextNotificationRelay = relay
+        disposable = notificationRelay
+            .doOnNext {
+                Log.e("$$$", "MyGattDelegate::startNotification 000")
+            }
+            .zipWith(relay) { byteArray, _ ->
+                byteArray
+            }
+            .doOnNext {
+                Log.e("$$$", "MyGattDelegate::startNotification 111")
+            }
             .subscribeOn(Schedulers.computation())
-            .doFinally { disposable = null }
+            .doFinally {
+                disposable = null
+                nextNotificationRelay = null
+            }
             .subscribe({
                 if (Build.VERSION.SDK_INT >= 33) {
-                    gattServer.notifyCharacteristicChanged(device, characteristic, false, it.toByteArray())
+                    gattServer.notifyCharacteristicChanged(device, characteristic, false, it)
                 } else {
-                    characteristic.value = it.toByteArray()
+                    characteristic.value = it
                     gattServer.notifyCharacteristicChanged(device, characteristic, false)
                 }
             }, {
@@ -74,7 +89,8 @@ class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
     }
 
     override fun nextNotification() {
-        notificationRelay.accept(1)
+        Log.e("$$$", "MyGattDelegate::nextNotification")
+        nextNotificationRelay?.accept(1)
     }
 
     companion object {

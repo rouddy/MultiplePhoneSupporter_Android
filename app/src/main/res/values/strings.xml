@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">TwoPhoneSupporter</string>
     <string name="service_name">Notification Service</string>
+    <string name="bluetooth_service_notification_title">Two Phone Service</string>
 </resources>

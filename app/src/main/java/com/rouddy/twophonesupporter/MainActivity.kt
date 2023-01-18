@@ -26,7 +26,15 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        MyNotificationListenerService.bindService(this)
+        Intent(this, BluetoothService::class.java).also {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(it)
+            } else {
+                startService(it)
+            }
+        }
+
+        BluetoothService.bindService(this)
             .flatMapSingle {
                 it.checkPeripheralStarted()
             }
@@ -47,7 +55,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             checkPeripheralPermission()
-                .andThen(MyNotificationListenerService.bindService(this))
+                .andThen(BluetoothService.bindService(this))
                 .flatMapSingle { service ->
                     service.checkPeripheralStarted()
                         .flatMap {
