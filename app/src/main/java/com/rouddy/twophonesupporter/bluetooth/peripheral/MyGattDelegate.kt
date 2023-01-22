@@ -4,8 +4,6 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
-import android.bluetooth.BluetoothGattServer
-import android.os.Build
 import android.util.Log
 import com.jakewharton.rxrelay3.BehaviorRelay
 import com.jakewharton.rxrelay3.PublishRelay
@@ -95,7 +93,7 @@ class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
         return data
     }
 
-    override fun startNotification(notificationType: BleGattServiceGenerator.NotificationType, device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, gattServer: BluetoothGattServer) {
+    override fun startNotification(notificationType: BleGattServiceGenerator.NotificationType, device: BluetoothDevice, callback: (ByteArray) -> Unit) {
         val relay = BehaviorRelay
             .create<Any>()
             .apply { accept(1) }
@@ -110,12 +108,7 @@ class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
                 nextNotificationRelay = null
             }
             .subscribe({
-                if (Build.VERSION.SDK_INT >= 33) {
-                    gattServer.notifyCharacteristicChanged(device, characteristic, false, it)
-                } else {
-                    characteristic.value = it
-                    gattServer.notifyCharacteristicChanged(device, characteristic, false)
-                }
+                callback.invoke(it)
             }, {
                 Log.e("$$$", "notification error", it)
             })

@@ -3,6 +3,7 @@ package com.rouddy.twophonesupporter
 import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import com.jakewharton.rxrelay3.PublishRelay
 import com.rouddy.twophonesupporter.bluetooth.peripheral.MyGattDelegate
@@ -26,7 +27,7 @@ object BleGattServiceGenerator {
         fun getCharacteris(): List<BluetoothGattCharacteristic>
         fun getReadResponse(uuid: UUID): ByteArray
         fun getWriteResponse(uuid: UUID, data: ByteArray): ByteArray
-        fun startNotification(notificationType: NotificationType, device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, gattServer: BluetoothGattServer)
+        fun startNotification(notificationType: NotificationType, device: BluetoothDevice, callback: (ByteArray) -> Unit)
         fun stopNotification(uuid: UUID)
         fun getNotificationType(uuid: UUID): NotificationType?
         fun nextNotification()
@@ -105,10 +106,20 @@ object BleGattServiceGenerator {
 
             override fun onDescriptorWriteRequest(device: BluetoothDevice?, requestId: Int, descriptor: BluetoothGattDescriptor?, preparedWrite: Boolean, responseNeeded: Boolean, offset: Int, value: ByteArray?) {
                 super.onDescriptorWriteRequest(device, requestId, descriptor, preparedWrite, responseNeeded, offset, value)
+
+                val notifyData: (ByteArray) -> Unit = {
+                    if (Build.VERSION.SDK_INT >= 33) {
+                        gattServer?.notifyCharacteristicChanged(device!!, descriptor!!.characteristic, false, it)
+                    } else {
+                        descriptor!!.characteristic.value = it
+                        gattServer?.notifyCharacteristicChanged(device!!, descriptor.characteristic, false)
+                    }
+                }
+
                 if (value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)) {
-                    gattDelegate.startNotification(NotificationType.Notification, device!!, descriptor!!.characteristic, gattServer!!)
+                    gattDelegate.startNotification(NotificationType.Notification, device!!, notifyData)
                 } else if (value.contentEquals(BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)) {
-                    gattDelegate.startNotification(NotificationType.Indication, device!!, descriptor!!.characteristic, gattServer!!)
+                    gattDelegate.startNotification(NotificationType.Indication, device!!, notifyData)
                 } else if (value.contentEquals(BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)) {
                     gattDelegate.stopNotification(descriptor!!.characteristic.uuid)
                 }
