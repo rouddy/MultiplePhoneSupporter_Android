@@ -1,4 +1,4 @@
-package com.rouddy.twophonesupporter
+package com.rouddy.twophonesupporter.bluetooth
 
 import android.app.*
 import android.content.Context
@@ -8,7 +8,11 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import com.algorigo.library.rx.Rx2ServiceBindingFactory
-import com.jakewharton.rxrelay3.PublishRelay
+import com.rouddy.twophonesupporter.BleAdvertiser
+import com.rouddy.twophonesupporter.BleGattServiceGenerator
+import com.rouddy.twophonesupporter.MainActivity
+import com.rouddy.twophonesupporter.R
+import com.rouddy.twophonesupporter.bluetooth.peripheral.MyGattDelegate
 import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
@@ -29,7 +33,6 @@ class BluetoothService : Service() {
     private val gattDelegate = MyGattDelegate()
 
     private var peripheralDisposable: Disposable? = null
-    private var notificationRelay = PublishRelay.create<ByteArray>()
 
     override fun onCreate() {
         Log.e("$$$", "BluetoothService::onCreate")
@@ -97,16 +100,13 @@ class BluetoothService : Service() {
             return
         }
 
-        Log.e("$$$", "startBluetooth")
         peripheralDisposable = BleGattServiceGenerator
             .startServer(this, gattDelegate)
             .flatMap {
-                BleAdvertiser
-                    .startAdvertising(this)
+                BleAdvertiser.startAdvertising(this)
             }
             .doFinally {
                 peripheralDisposable = null
-                Log.e("$$$", "startBluetooth doFinally")
             }
             .doOnNext {
                 if (subject?.hasComplete() == false) {
@@ -118,19 +118,9 @@ class BluetoothService : Service() {
                     subject.onError(it)
                 }
             }
-            .flatMapCompletable {
-                notificationRelay
-                    .concatMapCompletable {
-                        Completable.fromCallable {
-                            Log.e("$$$", "BluetoothService::accept:${it.joinToString { String.format("%02x", it) }}")
-                            gattDelegate.notificationRelay.accept(it)
-                        }
-                    }
-            }
             .subscribe({
             }, {
                 Log.e("$$$", "start bluetooth error", it)
-
             })
     }
 
@@ -155,10 +145,9 @@ class BluetoothService : Service() {
             .getBoolean(KEY_ACT_AS_PERIPHERAL_STARTED, false)
     }
 
-    fun sendData(byteArray: ByteArray): Completable {
-        return Completable.fromCallable {
-            gattDelegate.notificationRelay.accept(byteArray)
-        }
+    fun notificationPosted(json: String): Completable {
+        val packet = Packet(Packet.PacketType.Notification, json.toByteArray().toList())
+        return gattDelegate.sendPacket(packet)
     }
 
     companion object {

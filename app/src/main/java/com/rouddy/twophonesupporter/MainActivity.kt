@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationManagerCompat
+import com.rouddy.twophonesupporter.bluetooth.BluetoothService
 import com.rouddy.twophonesupporter.databinding.ActivityMainBinding
 import com.tbruyelle.rxpermissions3.RxPermissions
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
@@ -34,7 +35,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        BluetoothService.bindService(this)
+        BluetoothService
+            .bindService(this)
             .flatMapSingle {
                 it.checkPeripheralStarted()
             }
@@ -88,7 +90,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkNotificationPermissionGrantred(): Boolean {
         val sets = NotificationManagerCompat.getEnabledListenerPackages(this)
-        Log.e("$$$", "enabled:${sets.joinToString(",")}")
         return sets.contains(packageName)
     }
 

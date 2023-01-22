@@ -46,7 +46,7 @@
         </service>
 
         <service
-            android:name=".BluetoothService"
+            android:name=".bluetooth.BluetoothService"
             android:enabled="true"
             android:exported="false" />
     </application>

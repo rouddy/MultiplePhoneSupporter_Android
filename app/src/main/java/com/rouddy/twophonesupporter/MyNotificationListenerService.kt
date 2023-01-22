@@ -4,10 +4,9 @@ import android.app.Notification
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
-import androidx.core.content.ContextCompat
 import com.google.gson.Gson
 import com.google.gson.JsonObject
-import io.reactivex.rxjava3.core.Completable
+import com.rouddy.twophonesupporter.bluetooth.BluetoothService
 
 class MyNotificationListenerService : NotificationListenerService() {
 
@@ -43,11 +42,10 @@ class MyNotificationListenerService : NotificationListenerService() {
 //            }
             Gson().toJson(json)
         }?.also { json ->
-            Log.e("$$$", "NotificationListenerService::onNotificationPosted:$json")
-//            gattDelegate.notificationRelay.accept(it.toByteArray())
-            BluetoothService.bindService(this)
+            BluetoothService
+                .bindService(this)
                 .flatMapFirstCompletable {
-                    it.sendData(json.toByteArray())
+                    it.notificationPosted(json)
                 }
                 .subscribe({
                     Log.e("$$$", "NotificationListenerService::sendData complete")

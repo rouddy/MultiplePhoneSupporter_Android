@@ -1,4 +1,4 @@
-package com.rouddy.twophonesupporter
+package com.rouddy.twophonesupporter.bluetooth.peripheral
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
@@ -7,34 +7,82 @@ import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattServer
 import android.os.Build
 import android.util.Log
-import com.algorigo.library.toByteArray
 import com.jakewharton.rxrelay3.BehaviorRelay
 import com.jakewharton.rxrelay3.PublishRelay
-import io.reactivex.rxjava3.core.Observable
+import com.rouddy.twophonesupporter.BleGattServiceGenerator
+import com.rouddy.twophonesupporter.bluetooth.Packet
+import io.reactivex.rxjava3.core.Completable
+import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.disposables.Disposable
+import io.reactivex.rxjava3.kotlin.addTo
 import io.reactivex.rxjava3.schedulers.Schedulers
 import java.util.*
-import java.util.concurrent.TimeUnit
 
 @SuppressLint("MissingPermission")
 class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
 
-    private var disposable: Disposable? = null
+    private var notificationDisposable: Disposable? = null
     private var nextNotificationRelay: BehaviorRelay<Any>? = null
-    val notificationRelay = PublishRelay.create<ByteArray>()
+    private val compositeDisposable = CompositeDisposable()
+    private lateinit var receivedDataRelay: BehaviorRelay<ByteArray>
+    private val receivedPacketRelay = PublishRelay.create<Packet>()
+    private val notificationRelay = PublishRelay.create<ByteArray>()
+
+    override fun onConnected() {
+        receivedDataRelay = BehaviorRelay
+            .create<ByteArray>()
+            .apply {
+                accept(byteArrayOf())
+            }
+        receivedDataRelay
+            .scan { t1, t2 ->
+                (t1 + t2).let { bytes ->
+                    var byteArray = bytes
+                    while (true) {
+                        val packet = Packet.initWithData(byteArray)
+                        if (packet == null) {
+                            break
+                        }
+                        receivedPacketRelay.accept(packet)
+                        byteArray = byteArray.sliceArray(packet.size until packet.size)
+                    }
+                    byteArray
+                }
+            }
+            .subscribe({
+                Log.e("$$$", "received data relay $it")
+            }, {
+                Log.e("$$$", "received data relay error", it)
+            })
+            .addTo(compositeDisposable)
+
+        receivedPacketRelay
+            .flatMapCompletable {
+                Completable.fromCallable {
+                    processPacket(it)
+                }
+            }
+            .subscribe({
+            }, {
+
+            })
+            .addTo(compositeDisposable)
+    }
 
     override fun getCharacteris(): List<BluetoothGattCharacteristic> {
         return listOf(
             BluetoothGattCharacteristic(
-                CHARACTERISTIC_UUID,
-                BluetoothGattCharacteristic.PROPERTY_READ or
-                        BluetoothGattCharacteristic.PROPERTY_WRITE or
-                        BluetoothGattCharacteristic.PROPERTY_NOTIFY,
-                BluetoothGattCharacteristic.PERMISSION_READ or
+                WRITE_CHARACTERISTIC_UUID,
+                        BluetoothGattCharacteristic.PROPERTY_WRITE,
                         BluetoothGattCharacteristic.PERMISSION_WRITE
+            ),
+            BluetoothGattCharacteristic(
+                NOTIFY_CHARACTERISTIC_UUID,
+                BluetoothGattCharacteristic.PROPERTY_NOTIFY,
+                BluetoothGattCharacteristic.PERMISSION_WRITE
             ).apply {
                 addDescriptor(BluetoothGattDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"), BluetoothGattCharacteristic.PERMISSION_WRITE))
-            }
+            },
         )
     }
 
@@ -43,25 +91,22 @@ class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
     }
 
     override fun getWriteResponse(uuid: UUID, data: ByteArray): ByteArray {
+        receivedDataRelay.accept(data)
         return data
     }
 
     override fun startNotification(notificationType: BleGattServiceGenerator.NotificationType, device: BluetoothDevice, characteristic: BluetoothGattCharacteristic, gattServer: BluetoothGattServer) {
-        val relay = BehaviorRelay.create<Any>().apply { accept(1) }
+        val relay = BehaviorRelay
+            .create<Any>()
+            .apply { accept(1) }
         nextNotificationRelay = relay
-        disposable = notificationRelay
-            .doOnNext {
-                Log.e("$$$", "MyGattDelegate::startNotification 000")
-            }
+        notificationDisposable = notificationRelay
             .zipWith(relay) { byteArray, _ ->
                 byteArray
             }
-            .doOnNext {
-                Log.e("$$$", "MyGattDelegate::startNotification 111")
-            }
             .subscribeOn(Schedulers.computation())
             .doFinally {
-                disposable = null
+                notificationDisposable = null
                 nextNotificationRelay = null
             }
             .subscribe({
@@ -77,11 +122,11 @@ class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
     }
 
     override fun stopNotification(uuid: UUID) {
-        disposable?.dispose()
+        notificationDisposable?.dispose()
     }
 
     override fun getNotificationType(uuid: UUID): BleGattServiceGenerator.NotificationType? {
-        return if (disposable != null) {
+        return if (notificationDisposable != null) {
             BleGattServiceGenerator.NotificationType.Notification
         } else {
             null
@@ -89,13 +134,41 @@ class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
     }
 
     override fun nextNotification() {
-        Log.e("$$$", "MyGattDelegate::nextNotification")
         nextNotificationRelay?.accept(1)
     }
 
+    private fun processPacket(packet: Packet) {
+        when (packet.type) {
+            Packet.PacketType.CheckDevice -> processCheckDevice(packet.data)
+            else -> {
+
+            }
+        }
+    }
+
+    private fun processCheckDevice(data: List<Byte>) {
+        val centralUuid = String(data.toByteArray())
+        val certificated = if (true) {
+            0x01.toByte()
+        } else {
+            0x00.toByte()
+        }
+        val returnPacket = Packet(Packet.PacketType.CheckDevice, listOf(certificated))
+        notificationRelay.accept(returnPacket.toByteArray())
+    }
+
+    fun sendPacket(packet: Packet): Completable {
+        return Completable.fromCallable {
+            notificationRelay.accept(packet.toByteArray())
+        }
+    }
+
     companion object {
+        internal val VERSION = 0x01
+
         internal val SERVICE_UUID = UUID.fromString("6E400001-B5A3-F393-E0A9-0123456789AB")
-        internal val CHARACTERISTIC_UUID = UUID.fromString("6E400002-B5A3-F393-E0A9-0123456789AB")
+        internal val WRITE_CHARACTERISTIC_UUID = UUID.fromString("6E400002-B5A3-F393-E0A9-0123456789AB")
+        internal val NOTIFY_CHARACTERISTIC_UUID = UUID.fromString("6E400003-B5A3-F393-E0A9-0123456789AB")
 
         internal val UUID_DEVICE_INFO_SERVICE = UUID.fromString("0000180A-0000-1000-8000-00805F9B34FB")
         internal val UUID_MANUFACTURER_NAME = UUID.fromString("00002A29-0000-1000-8000-00805F9B34FB")

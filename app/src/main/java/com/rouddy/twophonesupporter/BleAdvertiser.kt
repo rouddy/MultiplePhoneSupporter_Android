@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.os.ParcelUuid
 import android.util.Log
 import androidx.core.app.ActivityCompat
+import com.rouddy.twophonesupporter.bluetooth.peripheral.MyGattDelegate
 import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.schedulers.Schedulers
@@ -26,13 +27,11 @@ object BleAdvertiser {
         val advertiseCallback = object : AdvertiseCallback() {
             override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
                 super.onStartSuccess(settingsInEffect)
-                Log.e("$$$", "AdvertiseCallback::onStartSuccess")
                 connectedSubject.onNext(bluetoothLeAdvertiser!!)
             }
 
             override fun onStartFailure(errorCode: Int) {
                 super.onStartFailure(errorCode)
-                Log.e("$$$", "AdvertiseCallback::onStartFailure:$errorCode")
                 connectedSubject.onError(RuntimeException("Failure:$errorCode"))
             }
         }
@@ -44,9 +43,6 @@ object BleAdvertiser {
 
             val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
             val bluetoothAdapter = bluetoothManager.adapter
-
-//            val isNameChanged = bluetoothAdapter.setName("Test")
-//            Log.e("$$$", "BleAdvertiseObservable::isNameChanged:$isNameChanged")
 
             bluetoothLeAdvertiser = bluetoothAdapter.bluetoothLeAdvertiser
             val settings = AdvertiseSettings
@@ -65,7 +61,6 @@ object BleAdvertiser {
                 .build()
 
             bluetoothLeAdvertiser!!.startAdvertising(settings, data, advertiseCallback)
-            Log.e("$$$", "BleAdvertiseObservable startAdvertising")
         }
             .subscribeOn(Schedulers.io())
             .andThen(connectedSubject)
