@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.util.Log
+import com.algorigo.library.toInt
 import com.jakewharton.rxrelay3.BehaviorRelay
 import com.jakewharton.rxrelay3.PublishRelay
 import com.rouddy.twophonesupporter.BleGattServiceGenerator
@@ -14,10 +15,23 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.disposables.Disposable
 import io.reactivex.rxjava3.kotlin.addTo
 import io.reactivex.rxjava3.schedulers.Schedulers
+import java.nio.ByteOrder
 import java.util.*
 
 @SuppressLint("MissingPermission")
 class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
+
+    enum class OperatingSystem(val byte: Byte) {
+        Android(0x00),
+        iOS(0x01),
+        ;
+
+        companion object {
+            fun valueFor(byte: Byte): OperatingSystem? {
+                return values().firstOrNull { it.byte == byte }
+            }
+        }
+    }
 
     private var notificationDisposable: Disposable? = null
     private var nextNotificationRelay: BehaviorRelay<Any>? = null
@@ -132,21 +146,43 @@ class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
 
     private fun processPacket(packet: Packet) {
         when (packet.type) {
+            Packet.PacketType.CheckVersion -> processVersion(packet.data)
             Packet.PacketType.CheckDevice -> processCheckDevice(packet.data)
+            Packet.PacketType.CheckOS -> processOS(packet.data)
             else -> {
 
             }
         }
     }
 
+    private fun processVersion(data: List<Byte>) {
+        val centralVersion = data.toByteArray().toInt(byteOrder = ByteOrder.LITTLE_ENDIAN)
+        Log.e("$$$", "centralVersion:$centralVersion")
+        val versionOk = if (centralVersion == VERSION) {
+            0x01.toByte()
+        } else {
+            0x00.toByte()
+        }
+        val returnPacket = Packet(Packet.PacketType.CheckVersion, listOf(versionOk))
+        notificationRelay.accept(returnPacket.toByteArray())
+    }
+
     private fun processCheckDevice(data: List<Byte>) {
         val centralUuid = String(data.toByteArray())
+        Log.e("$$$", "centralUuid:$centralUuid")
         val certificated = if (true) {
             0x01.toByte()
         } else {
             0x00.toByte()
         }
         val returnPacket = Packet(Packet.PacketType.CheckDevice, listOf(certificated))
+        notificationRelay.accept(returnPacket.toByteArray())
+    }
+
+    private fun processOS(data: List<Byte>) {
+        val centralOS = OperatingSystem.valueFor(data[0])
+        Log.e("$$$", "centralOS:$centralOS")
+        val returnPacket = Packet(Packet.PacketType.CheckOS, listOf(OperatingSystem.Android.byte))
         notificationRelay.accept(returnPacket.toByteArray())
     }
 
