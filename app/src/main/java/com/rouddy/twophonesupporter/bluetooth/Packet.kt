@@ -20,31 +20,34 @@ data class Packet(val type: PacketType, val data: List<Byte>) {
     }
 
     val size: Int
-        get() = data.size + 6
+        get() = SizeSize + TypeSize + data.size
 
     fun toByteArray(): ByteArray {
-        return size.toByteArray(byteOrder = ByteOrder.LITTLE_ENDIAN) + type.rawValue.toByteArray() + data.toByteArray()
+        return size.toShort().toByteArray() + type.rawValue.toByteArray() + data.toByteArray()
     }
 
     companion object {
+        internal const val SizeSize = 2
+        internal const val TypeSize = 2
+
         fun initWithData(byteArray: ByteArray): Packet? {
             return byteArray
                 .toList()
                 .let { bytes ->
-                    if (bytes.size < 4) {
+                    if (bytes.size < SizeSize) {
                         return@let null
                     }
 
                     val size = bytes
-                        .subList(0, 4)
+                        .subList(0, SizeSize)
                         .toByteArray()
-                        .toInt()
+                        .toShort()
                     if (bytes.size >= size) {
                         val packetTypeShort = bytes
-                            .subList(4, 6)
+                            .subList(SizeSize, SizeSize + TypeSize)
                             .toByteArray()
                             .toShort()
-                        val data = bytes.subList(6, size)
+                        val data = bytes.subList(SizeSize + TypeSize, size.toInt())
                         PacketType
                             .valueFor(packetTypeShort)
                             ?.let {
@@ -56,14 +59,6 @@ data class Packet(val type: PacketType, val data: List<Byte>) {
                 }
         }
     }
-}
-
-fun ByteArray.toInt(): Int {
-    if (size != 4) {
-        throw Exception("wrong len")
-    }
-    reverse()
-    return ByteBuffer.wrap(this).int
 }
 
 fun ByteArray.toShort(): Short {
