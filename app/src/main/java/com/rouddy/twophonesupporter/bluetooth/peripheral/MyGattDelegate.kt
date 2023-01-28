@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
-import android.os.Handler
 import android.util.Log
 import com.algorigo.library.toInt
 import com.google.gson.Gson
@@ -40,6 +39,7 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
 
     interface Delegate {
         fun checkDeviceUuid(uuid: String): Boolean
+        fun clearDeviceUuid()
     }
 
     private var notificationDisposable: Disposable? = null
@@ -159,6 +159,7 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
         when (packet.type) {
             Packet.PacketType.CheckVersion -> processVersion(packet.data)
             Packet.PacketType.CheckDevice -> processCheckDevice(packet.data)
+            Packet.PacketType.ClearDevice -> processClearDevice()
             else -> {
 
             }
@@ -168,12 +169,11 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
     private fun processVersion(data: List<Byte>) {
         val centralVersion = data.toByteArray().toInt(byteOrder = ByteOrder.LITTLE_ENDIAN)
         Log.e("$$$", "centralVersion:$centralVersion")
-        val versionOk = if (centralVersion == VERSION) {
-            0x01.toByte()
-        } else {
-            0x00.toByte()
+        val json = JsonObject().apply {
+            addProperty("versionOk", centralVersion == VERSION)
+            addProperty("peripheralId", address)
         }
-        val returnPacket = Packet(Packet.PacketType.CheckVersion, listOf(versionOk))
+        val returnPacket = Packet(Packet.PacketType.CheckVersion, Gson().toJson(json).toByteArray().toList())
         sendPacketRelay.accept(returnPacket)
     }
 
@@ -200,6 +200,19 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
                     Log.e("$$$", "timer error", it)
                 })
         }
+    }
+
+    private fun processClearDevice() {
+        val returnPacket = Packet(Packet.PacketType.ClearDevice, listOf())
+        sendPacketRelay.accept(returnPacket)
+        delegate.clearDeviceUuid()
+        Completable.timer(1, TimeUnit.SECONDS)
+            .subscribeOn(Schedulers.io())
+            .subscribe({
+                disconnectDevice()
+            }, {
+                Log.e("$$$", "timer error", it)
+            })
     }
 
     fun sendPacket(packet: Packet): Completable {

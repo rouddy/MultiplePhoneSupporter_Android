@@ -207,6 +207,15 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
             }
     }
 
+    override fun clearDeviceUuid() {
+        getSharedPreferences(SHARED_PREFERENCE_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .apply {
+                remove(KEY_STORED_CENTRAL_DEVICE)
+            }
+            .apply()
+    }
+
     companion object {
         fun bindService(context: Context): Observable<BluetoothService> {
             return Rx2ServiceBindingFactory

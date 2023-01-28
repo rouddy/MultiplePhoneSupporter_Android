@@ -29,6 +29,8 @@ object BleGattServiceGenerator {
         private val serviceAddedRelay = BehaviorRelay.create<Any>()
         private val gattServer: BluetoothGattServer
             get() = gattServerRelay.firstOrError().blockingGet()
+        protected lateinit var address: String
+            private set
 
         val gattCallback = object : BluetoothGattServerCallback() {
             override fun onServiceAdded(status: Int, service: BluetoothGattService?) {
@@ -113,6 +115,7 @@ object BleGattServiceGenerator {
         internal fun initialize(context: Context): Observable<BluetoothGattServer> {
             return Completable.fromCallable {
                 val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+                address = bluetoothManager.adapter.address
                 gattServerRelay.accept(bluetoothManager.openGattServer(context, gattCallback))
                 val gattService = BluetoothGattService(MyGattDelegate.SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
                 getCharacteris()

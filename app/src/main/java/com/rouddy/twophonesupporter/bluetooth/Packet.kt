@@ -7,7 +7,7 @@ data class Packet(val type: PacketType, val data: List<Byte>) {
     enum class PacketType(val rawValue: Short) {
         CheckVersion(0x00),
         CheckDevice(0x01),
-        CheckOS(0x02),
+        ClearDevice(0x02),
         Notification(0x10),
         ;
 
