@@ -1,16 +1,16 @@
 package com.rouddy.twophonesupporter
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.content.Context
 import android.os.Build
 import android.util.Log
-import com.jakewharton.rxrelay3.PublishRelay
+import androidx.annotation.RequiresPermission
+import com.jakewharton.rxrelay3.BehaviorRelay
 import com.rouddy.twophonesupporter.bluetooth.peripheral.MyGattDelegate
 import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Observable
-import io.reactivex.rxjava3.core.Single
-import io.reactivex.rxjava3.disposables.Disposable
 import io.reactivex.rxjava3.schedulers.Schedulers
 import io.reactivex.rxjava3.subjects.PublishSubject
 import java.util.*
@@ -22,13 +22,112 @@ object BleGattServiceGenerator {
         Indication,
     }
 
+    @SuppressLint("MissingPermission")
     abstract class GattDelegate {
-
-        private lateinit var gattServer: BluetoothGattServer
         private var connectedDevice: BluetoothDevice? = null
+        private val gattServerRelay = BehaviorRelay.create<BluetoothGattServer>()
+        private val serviceAddedRelay = BehaviorRelay.create<Any>()
+        private val gattServer: BluetoothGattServer
+            get() = gattServerRelay.firstOrError().blockingGet()
 
-        internal fun initialize(gattServer: BluetoothGattServer) {
-            this.gattServer = gattServer
+        val gattCallback = object : BluetoothGattServerCallback() {
+            override fun onServiceAdded(status: Int, service: BluetoothGattService?) {
+                super.onServiceAdded(status, service)
+                if (status == 0) {
+                    serviceAddedRelay.accept(1)
+                }
+            }
+
+            override fun onConnectionStateChange(device: BluetoothDevice?, status: Int, newState: Int) {
+                super.onConnectionStateChange(device, status, newState)
+                if (newState == BluetoothGattServer.STATE_CONNECTED) {
+                    onConnected(device!!)
+                } else if (newState == BluetoothGattServer.STATE_DISCONNECTED
+                    || newState == BluetoothGattServer.STATE_DISCONNECTING) {
+                    Log.e("$$$", "DISCONNECTED : $newState")
+                }
+            }
+
+            override fun onCharacteristicReadRequest(device: BluetoothDevice?, requestId: Int, offset: Int, characteristic: BluetoothGattCharacteristic?) {
+                super.onCharacteristicReadRequest(device, requestId, offset, characteristic)
+                val response = getReadResponse(characteristic!!.uuid)
+                gattServer.sendResponse(device!!, requestId, BluetoothGatt.GATT_SUCCESS, offset, response)
+            }
+
+            override fun onCharacteristicWriteRequest(device: BluetoothDevice?, requestId: Int, characteristic: BluetoothGattCharacteristic?, preparedWrite: Boolean, responseNeeded: Boolean, offset: Int, value: ByteArray?) {
+                super.onCharacteristicWriteRequest(device, requestId, characteristic, preparedWrite, responseNeeded, offset, value)
+                val response = getWriteResponse(characteristic!!.uuid, value!!)
+                if (responseNeeded) {
+                    gattServer.sendResponse(device!!, requestId, BluetoothGatt.GATT_SUCCESS, offset, response)
+                }
+            }
+
+            override fun onDescriptorReadRequest(device: BluetoothDevice?, requestId: Int, offset: Int, descriptor: BluetoothGattDescriptor?) {
+                super.onDescriptorReadRequest(device, requestId, offset, descriptor)
+                when (getNotificationType(descriptor!!.characteristic.uuid)) {
+                    NotificationType.Notification -> {
+                        gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+                    }
+                    NotificationType.Indication -> {
+                        gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)
+                    }
+                    null -> {
+                        gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)
+                    }
+                }
+            }
+
+            override fun onDescriptorWriteRequest(device: BluetoothDevice?, requestId: Int, descriptor: BluetoothGattDescriptor?, preparedWrite: Boolean, responseNeeded: Boolean, offset: Int, value: ByteArray?) {
+                super.onDescriptorWriteRequest(device, requestId, descriptor, preparedWrite, responseNeeded, offset, value)
+
+                val notifyData: (ByteArray) -> Unit = {
+                    if (Build.VERSION.SDK_INT >= 33) {
+                        gattServer.notifyCharacteristicChanged(device!!, descriptor!!.characteristic, false, it)
+                    } else {
+                        descriptor!!.characteristic.value = it
+                        gattServer.notifyCharacteristicChanged(device!!, descriptor.characteristic, false)
+                    }
+                }
+
+                if (value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)) {
+                    startNotification(NotificationType.Notification, device!!, notifyData)
+                } else if (value.contentEquals(BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)) {
+                    startNotification(NotificationType.Indication, device!!, notifyData)
+                } else if (value.contentEquals(BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)) {
+                    stopNotification(descriptor!!.characteristic.uuid)
+                }
+                gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
+            }
+
+            override fun onExecuteWrite(device: BluetoothDevice?, requestId: Int, execute: Boolean) {
+                super.onExecuteWrite(device, requestId, execute)
+            }
+
+            override fun onNotificationSent(device: BluetoothDevice?, status: Int) {
+                super.onNotificationSent(device, status)
+                nextNotification()
+            }
+        }
+
+        @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
+        internal fun initialize(context: Context): Observable<BluetoothGattServer> {
+            return Completable.fromCallable {
+                val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+                gattServerRelay.accept(bluetoothManager.openGattServer(context, gattCallback))
+                val gattService = BluetoothGattService(MyGattDelegate.SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
+                getCharacteris()
+                    .forEach {
+                        gattService.addCharacteristic(it)
+                    }
+
+                gattServer.addService(gattService)
+            }
+                .andThen(gattServerRelay.zipWith(serviceAddedRelay) { gattServer, _ ->
+                    gattServer
+                })
+                .doFinally {
+                    gattServer.close()
+                }
         }
 
         fun onConnected(bluetoothDevice: BluetoothDevice) {
@@ -36,7 +135,6 @@ object BleGattServiceGenerator {
             onConnected()
         }
 
-        @SuppressLint("MissingPermission")
         fun disconnectDevice() {
             connectedDevice?.let {
                 gattServer.cancelConnection(it)
@@ -54,126 +152,9 @@ object BleGattServiceGenerator {
         abstract fun nextNotification()
     }
 
-    @SuppressLint("MissingPermission")
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun startServer(context: Context, gattDelegate: GattDelegate): Observable<BluetoothGattServer> {
-        val gattServerSubject = PublishSubject.create<BluetoothGattServer>()
-        var gattServer: BluetoothGattServer? = null
-
-        val responseRely = PublishRelay.create<Any>()
-        var disposable: Disposable? = null
-
-        val gattCallback = object : BluetoothGattServerCallback() {
-            override fun onServiceAdded(status: Int, service: BluetoothGattService?) {
-                super.onServiceAdded(status, service)
-                if (status == 0 && !gattServerSubject.hasComplete()) {
-                    gattServerSubject.onNext(gattServer!!)
-                }
-            }
-
-            override fun onConnectionStateChange(device: BluetoothDevice?, status: Int, newState: Int) {
-                super.onConnectionStateChange(device, status, newState)
-                if (newState == BluetoothGattServer.STATE_CONNECTED) {
-                    gattDelegate.onConnected(device!!)
-                    if (disposable == null) {
-                        disposable = responseRely
-                            .concatMapSingle {
-                                Single.fromCallable {
-
-                                }
-                            }
-                            .doFinally {
-                                disposable = null
-                            }
-                            .subscribe({
-                                Log.e("$$$", "gatt response")
-                            }, {
-                                Log.e("$$$", "gatt response error")
-                            })
-                    }
-                } else if (newState == BluetoothGattServer.STATE_DISCONNECTED
-                    || newState == BluetoothGattServer.STATE_DISCONNECTING) {
-                    disposable?.dispose()
-                }
-            }
-
-            override fun onCharacteristicReadRequest(device: BluetoothDevice?, requestId: Int, offset: Int, characteristic: BluetoothGattCharacteristic?) {
-                super.onCharacteristicReadRequest(device, requestId, offset, characteristic)
-                val response = gattDelegate.getReadResponse(characteristic!!.uuid)
-                gattServer!!.sendResponse(device!!, requestId, BluetoothGatt.GATT_SUCCESS, offset, response)
-            }
-
-            override fun onCharacteristicWriteRequest(device: BluetoothDevice?, requestId: Int, characteristic: BluetoothGattCharacteristic?, preparedWrite: Boolean, responseNeeded: Boolean, offset: Int, value: ByteArray?) {
-                super.onCharacteristicWriteRequest(device, requestId, characteristic, preparedWrite, responseNeeded, offset, value)
-                val response = gattDelegate.getWriteResponse(characteristic!!.uuid, value!!)
-                if (responseNeeded) {
-                    gattServer!!.sendResponse(device!!, requestId, BluetoothGatt.GATT_SUCCESS, offset, response)
-                }
-            }
-
-            override fun onDescriptorReadRequest(device: BluetoothDevice?, requestId: Int, offset: Int, descriptor: BluetoothGattDescriptor?) {
-                super.onDescriptorReadRequest(device, requestId, offset, descriptor)
-                when (gattDelegate.getNotificationType(descriptor!!.characteristic.uuid)) {
-                    NotificationType.Notification -> {
-                        gattServer!!.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
-                    }
-                    NotificationType.Indication -> {
-                        gattServer!!.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)
-                    }
-                    null -> {
-                        gattServer!!.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)
-                    }
-                }
-            }
-
-            override fun onDescriptorWriteRequest(device: BluetoothDevice?, requestId: Int, descriptor: BluetoothGattDescriptor?, preparedWrite: Boolean, responseNeeded: Boolean, offset: Int, value: ByteArray?) {
-                super.onDescriptorWriteRequest(device, requestId, descriptor, preparedWrite, responseNeeded, offset, value)
-
-                val notifyData: (ByteArray) -> Unit = {
-                    if (Build.VERSION.SDK_INT >= 33) {
-                        gattServer?.notifyCharacteristicChanged(device!!, descriptor!!.characteristic, false, it)
-                    } else {
-                        descriptor!!.characteristic.value = it
-                        gattServer?.notifyCharacteristicChanged(device!!, descriptor.characteristic, false)
-                    }
-                }
-
-                if (value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)) {
-                    gattDelegate.startNotification(NotificationType.Notification, device!!, notifyData)
-                } else if (value.contentEquals(BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)) {
-                    gattDelegate.startNotification(NotificationType.Indication, device!!, notifyData)
-                } else if (value.contentEquals(BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)) {
-                    gattDelegate.stopNotification(descriptor!!.characteristic.uuid)
-                }
-                gattServer!!.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value)
-            }
-
-            override fun onExecuteWrite(device: BluetoothDevice?, requestId: Int, execute: Boolean) {
-                super.onExecuteWrite(device, requestId, execute)
-            }
-
-            override fun onNotificationSent(device: BluetoothDevice?, status: Int) {
-                super.onNotificationSent(device, status)
-                gattDelegate.nextNotification()
-            }
-        }
-
-        return Completable.fromCallable {
-            val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-            gattServer = bluetoothManager.openGattServer(context, gattCallback).also {
-                gattDelegate.initialize(it)
-            }
-            val gattService = BluetoothGattService(MyGattDelegate.SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
-            gattDelegate.getCharacteris()
-                .forEach {
-                    gattService.addCharacteristic(it)
-                }
-
-            gattServer!!.addService(gattService)
-        }
+        return gattDelegate.initialize(context)
             .subscribeOn(Schedulers.io())
-            .andThen(gattServerSubject)
-            .doFinally {
-                gattServer!!.close()
-            }
     }
 }

@@ -24,7 +24,7 @@ import java.util.*
 import java.util.concurrent.TimeUnit
 
 @SuppressLint("MissingPermission")
-class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.GattDelegate {
+class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.GattDelegate() {
 
     enum class OperatingSystem(val byte: Byte) {
         Android(0x00),
