@@ -28,7 +28,7 @@ import io.reactivex.rxjava3.subjects.PublishSubject
 import io.reactivex.rxjava3.subjects.Subject
 import java.io.ByteArrayOutputStream
 
-class BluetoothService : Service() {
+class BluetoothService : Service(), MyGattDelegate.Delegate {
 
     inner class ServiceBinder : Binder() {
         fun getService(): BluetoothService {
@@ -38,7 +38,7 @@ class BluetoothService : Service() {
 
     private val binder = ServiceBinder()
 
-    private val gattDelegate = MyGattDelegate()
+    private val gattDelegate = MyGattDelegate(this)
 
     private var peripheralDisposable: Disposable? = null
 
@@ -139,7 +139,18 @@ class BluetoothService : Service() {
         }
     }
 
+    fun clearPeripheral() {
+        getSharedPreferences(SHARED_PREFERENCE_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .apply {
+                remove(KEY_STORED_CENTRAL_DEVICE)
+            }
+            .apply()
+        gattDelegate.disconnectDevice()
+    }
+
     private fun setActAsPeripheralStarted(started: Boolean) {
+        clearPeripheral()
         getSharedPreferences(SHARED_PREFERENCE_NAME, Context.MODE_PRIVATE)
             .edit()
             .apply {
@@ -181,6 +192,21 @@ class BluetoothService : Service() {
             .flatMapCompletable { gattDelegate.sendPacket(it) }
     }
 
+    override fun checkDeviceUuid(uuid: String): Boolean {
+        return getSharedPreferences(SHARED_PREFERENCE_NAME, Context.MODE_PRIVATE)
+            .run {
+                val stored = getString(KEY_STORED_CENTRAL_DEVICE, null)
+                if (stored != null) {
+                    stored.compareTo(uuid) == 0
+                } else {
+                    edit().apply {
+                        putString(KEY_STORED_CENTRAL_DEVICE, uuid)
+                    }.apply()
+                    true
+                }
+            }
+    }
+
     companion object {
         fun bindService(context: Context): Observable<BluetoothService> {
             return Rx2ServiceBindingFactory
@@ -193,6 +219,7 @@ class BluetoothService : Service() {
 
         private const val SHARED_PREFERENCE_NAME = "BluetoothServiceSP"
         private const val KEY_ACT_AS_PERIPHERAL_STARTED = "KeyActAsPeripheralStarted"
+        private const val KEY_STORED_CENTRAL_DEVICE = "KeyStoredCentralDevice"
 
         private const val NOTIFICATION_CHANNEL_ID_BLUETOOTH_SERVICE = "NotificationChannelIdBluetoothService"
         private const val NOTIFICATION_ID_BLUETOOTH_SERVICE = 0x01410

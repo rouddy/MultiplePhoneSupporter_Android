@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
+import android.os.Handler
 import android.util.Log
 import com.algorigo.library.toInt
 import com.google.gson.Gson
@@ -20,9 +21,10 @@ import io.reactivex.rxjava3.kotlin.addTo
 import io.reactivex.rxjava3.schedulers.Schedulers
 import java.nio.ByteOrder
 import java.util.*
+import java.util.concurrent.TimeUnit
 
 @SuppressLint("MissingPermission")
-class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
+class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.GattDelegate {
 
     enum class OperatingSystem(val byte: Byte) {
         Android(0x00),
@@ -34,6 +36,10 @@ class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
                 return values().firstOrNull { it.byte == byte }
             }
         }
+    }
+
+    interface Delegate {
+        fun checkDeviceUuid(uuid: String): Boolean
     }
 
     private var notificationDisposable: Disposable? = null
@@ -177,18 +183,23 @@ class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
         val receivedJson = Gson().fromJson(receivedString, CheckDeviceReceivedData::class.java)
         Log.e("$$$", "receivedJson:$receivedJson")
         val receivedUuid = receivedJson.uuid
+        val certificated = delegate.checkDeviceUuid(receivedUuid)
         val receivedOperatingSystem = OperatingSystem.valueFor(receivedJson.os)
-        val certificated = if (true) {
-            true
-        } else {
-            false
-        }
         val json = JsonObject().apply {
             addProperty("vaildDevice", certificated)
             addProperty("os", OperatingSystem.Android.byte)
         }
         val returnPacket = Packet(Packet.PacketType.CheckDevice, Gson().toJson(json).toByteArray().toList())
         sendPacketRelay.accept(returnPacket)
+        if (!certificated) {
+            Completable.timer(1, TimeUnit.SECONDS)
+                .subscribeOn(Schedulers.io())
+                .subscribe({
+                    disconnectDevice()
+                }, {
+                    Log.e("$$$", "timer error", it)
+                })
+        }
     }
 
     fun sendPacket(packet: Packet): Completable {

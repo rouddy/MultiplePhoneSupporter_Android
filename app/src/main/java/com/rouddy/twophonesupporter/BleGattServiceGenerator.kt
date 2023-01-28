@@ -22,15 +22,36 @@ object BleGattServiceGenerator {
         Indication,
     }
 
-    interface GattDelegate {
-        fun onConnected()
-        fun getCharacteris(): List<BluetoothGattCharacteristic>
-        fun getReadResponse(uuid: UUID): ByteArray
-        fun getWriteResponse(uuid: UUID, data: ByteArray): ByteArray
-        fun startNotification(notificationType: NotificationType, device: BluetoothDevice, callback: (ByteArray) -> Unit)
-        fun stopNotification(uuid: UUID)
-        fun getNotificationType(uuid: UUID): NotificationType?
-        fun nextNotification()
+    abstract class GattDelegate {
+
+        private lateinit var gattServer: BluetoothGattServer
+        private var connectedDevice: BluetoothDevice? = null
+
+        internal fun initialize(gattServer: BluetoothGattServer) {
+            this.gattServer = gattServer
+        }
+
+        fun onConnected(bluetoothDevice: BluetoothDevice) {
+            connectedDevice = bluetoothDevice
+            onConnected()
+        }
+
+        @SuppressLint("MissingPermission")
+        fun disconnectDevice() {
+            connectedDevice?.let {
+                gattServer.cancelConnection(it)
+            }
+            connectedDevice = null
+        }
+
+        abstract fun onConnected()
+        abstract fun getCharacteris(): List<BluetoothGattCharacteristic>
+        abstract fun getReadResponse(uuid: UUID): ByteArray
+        abstract fun getWriteResponse(uuid: UUID, data: ByteArray): ByteArray
+        abstract fun startNotification(notificationType: NotificationType, device: BluetoothDevice, callback: (ByteArray) -> Unit)
+        abstract fun stopNotification(uuid: UUID)
+        abstract fun getNotificationType(uuid: UUID): NotificationType?
+        abstract fun nextNotification()
     }
 
     @SuppressLint("MissingPermission")
@@ -52,7 +73,7 @@ object BleGattServiceGenerator {
             override fun onConnectionStateChange(device: BluetoothDevice?, status: Int, newState: Int) {
                 super.onConnectionStateChange(device, status, newState)
                 if (newState == BluetoothGattServer.STATE_CONNECTED) {
-                    gattDelegate.onConnected()
+                    gattDelegate.onConnected(device!!)
                     if (disposable == null) {
                         disposable = responseRely
                             .concatMapSingle {
@@ -138,7 +159,9 @@ object BleGattServiceGenerator {
 
         return Completable.fromCallable {
             val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-            gattServer = bluetoothManager.openGattServer(context, gattCallback)
+            gattServer = bluetoothManager.openGattServer(context, gattCallback).also {
+                gattDelegate.initialize(it)
+            }
             val gattService = BluetoothGattService(MyGattDelegate.SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
             gattDelegate.getCharacteris()
                 .forEach {
