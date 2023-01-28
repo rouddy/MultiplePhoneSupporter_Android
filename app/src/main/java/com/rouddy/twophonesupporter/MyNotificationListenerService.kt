@@ -28,24 +28,24 @@ class MyNotificationListenerService : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
         Log.e("$$$", "NotificationListenerService::onNotificationPosted:$sbn")
+        Log.e("$$$", "NotificationListenerService::extras:${sbn?.notification?.extras?.keySet()?.joinToString(",")}")
         sbn?.run {
-            val json = JsonObject()
-            json.addProperty("key", key)
-            json.addProperty("title", notification.extras.getString(Notification.EXTRA_TITLE).toString())
-            json.addProperty("text", notification.extras.getString(Notification.EXTRA_TEXT).toString())
-            json.addProperty("sub", notification.extras.getString(Notification.EXTRA_SUB_TEXT).toString())
-//            notification.extras.getInt(Notification.EXTRA_LARGE_ICON_BIG).also {
-//                Log.e("$$$", "NotificationListenerService:${it}")
-//                if (it != 0) {
-//                    Log.e("$$$", "NotificationListenerService:${ContextCompat.getDrawable(this@MyNotificationListenerService, it)}")
-//                }
-//            }
-            Gson().toJson(json)
-        }?.also { json ->
             BluetoothService
-                .bindService(this)
+                .bindService(this@MyNotificationListenerService)
                 .flatMapFirstCompletable {
-                    it.notificationPosted(json)
+                    it.notificationPosted(
+                        key,
+                        notification.extras.getString(Notification.EXTRA_TITLE),
+                        notification.extras.getString(Notification.EXTRA_TEXT),
+                        notification.extras.getString(Notification.EXTRA_SUB_TEXT),
+                        notification.extras.getInt(Notification.EXTRA_LARGE_ICON_BIG).let {
+                            if (it != 0) {
+                                it
+                            } else {
+                                null
+                            }
+                        }
+                    )
                 }
                 .subscribe({
                     Log.e("$$$", "NotificationListenerService::sendData complete")

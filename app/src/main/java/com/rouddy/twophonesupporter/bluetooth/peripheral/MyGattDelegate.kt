@@ -6,10 +6,13 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.util.Log
 import com.algorigo.library.toInt
+import com.google.gson.Gson
+import com.google.gson.JsonObject
 import com.jakewharton.rxrelay3.BehaviorRelay
 import com.jakewharton.rxrelay3.PublishRelay
 import com.rouddy.twophonesupporter.BleGattServiceGenerator
 import com.rouddy.twophonesupporter.bluetooth.Packet
+import com.rouddy.twophonesupporter.bluetooth.data.CheckDeviceReceivedData
 import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.disposables.Disposable
@@ -38,7 +41,7 @@ class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
     private val compositeDisposable = CompositeDisposable()
     private lateinit var receivedDataRelay: BehaviorRelay<ByteArray>
     private val receivedPacketRelay = PublishRelay.create<Packet>()
-    private val notificationRelay = PublishRelay.create<ByteArray>()
+    private val sendPacketRelay = PublishRelay.create<Packet>()
 
     override fun onConnected() {
         receivedDataRelay = BehaviorRelay
@@ -62,7 +65,7 @@ class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
                 }
             }
             .subscribe({
-                Log.e("$$$", "received data relay $it")
+                Log.e("$$$", "received data relay ${it.joinToString(separator = "") { String.format("%02x", it) }}")
             }, {
                 Log.e("$$$", "received data relay error", it)
             })
@@ -112,7 +115,8 @@ class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
             .create<Any>()
             .apply { accept(1) }
         nextNotificationRelay = relay
-        notificationDisposable = notificationRelay
+        notificationDisposable = sendPacketRelay
+            .map { it.toByteArray() }
             .zipWith(relay) { byteArray, _ ->
                 byteArray
             }
@@ -145,10 +149,10 @@ class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
     }
 
     private fun processPacket(packet: Packet) {
+        Log.e("$$$", "processPacket:${packet.type}:${packet.data.joinToString("") { String.format("%02x", it) }}")
         when (packet.type) {
             Packet.PacketType.CheckVersion -> processVersion(packet.data)
             Packet.PacketType.CheckDevice -> processCheckDevice(packet.data)
-            Packet.PacketType.CheckOS -> processOS(packet.data)
             else -> {
 
             }
@@ -164,31 +168,32 @@ class MyGattDelegate : BleGattServiceGenerator.GattDelegate {
             0x00.toByte()
         }
         val returnPacket = Packet(Packet.PacketType.CheckVersion, listOf(versionOk))
-        notificationRelay.accept(returnPacket.toByteArray())
+        sendPacketRelay.accept(returnPacket)
     }
 
     private fun processCheckDevice(data: List<Byte>) {
-        val centralUuid = String(data.toByteArray())
-        Log.e("$$$", "centralUuid:$centralUuid")
+        val receivedString = String(data.toByteArray())
+        Log.e("$$$", "receivedString:$receivedString")
+        val receivedJson = Gson().fromJson(receivedString, CheckDeviceReceivedData::class.java)
+        Log.e("$$$", "receivedJson:$receivedJson")
+        val receivedUuid = receivedJson.uuid
+        val receivedOperatingSystem = OperatingSystem.valueFor(receivedJson.os)
         val certificated = if (true) {
-            0x01.toByte()
+            true
         } else {
-            0x00.toByte()
+            false
         }
-        val returnPacket = Packet(Packet.PacketType.CheckDevice, listOf(certificated))
-        notificationRelay.accept(returnPacket.toByteArray())
-    }
-
-    private fun processOS(data: List<Byte>) {
-        val centralOS = OperatingSystem.valueFor(data[0])
-        Log.e("$$$", "centralOS:$centralOS")
-        val returnPacket = Packet(Packet.PacketType.CheckOS, listOf(OperatingSystem.Android.byte))
-        notificationRelay.accept(returnPacket.toByteArray())
+        val json = JsonObject().apply {
+            addProperty("vaildDevice", certificated)
+            addProperty("os", OperatingSystem.Android.byte)
+        }
+        val returnPacket = Packet(Packet.PacketType.CheckDevice, Gson().toJson(json).toByteArray().toList())
+        sendPacketRelay.accept(returnPacket)
     }
 
     fun sendPacket(packet: Packet): Completable {
         return Completable.fromCallable {
-            notificationRelay.accept(packet.toByteArray())
+            sendPacketRelay.accept(packet)
         }
     }
 

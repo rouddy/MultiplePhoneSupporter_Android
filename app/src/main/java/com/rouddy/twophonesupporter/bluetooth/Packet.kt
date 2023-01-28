@@ -1,8 +1,6 @@
 package com.rouddy.twophonesupporter.bluetooth
 
-import com.algorigo.library.toByteArray
 import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 data class Packet(val type: PacketType, val data: List<Byte>) {
 

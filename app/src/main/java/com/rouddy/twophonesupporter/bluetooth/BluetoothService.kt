@@ -3,11 +3,17 @@ package com.rouddy.twophonesupporter.bluetooth
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.util.Base64
 import android.util.Log
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import com.algorigo.library.rx.Rx2ServiceBindingFactory
+import com.google.gson.Gson
+import com.google.gson.JsonObject
 import com.rouddy.twophonesupporter.BleAdvertiser
 import com.rouddy.twophonesupporter.BleGattServiceGenerator
 import com.rouddy.twophonesupporter.MainActivity
@@ -17,8 +23,10 @@ import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.disposables.Disposable
+import io.reactivex.rxjava3.schedulers.Schedulers
 import io.reactivex.rxjava3.subjects.PublishSubject
 import io.reactivex.rxjava3.subjects.Subject
+import java.io.ByteArrayOutputStream
 
 class BluetoothService : Service() {
 
@@ -145,9 +153,32 @@ class BluetoothService : Service() {
             .getBoolean(KEY_ACT_AS_PERIPHERAL_STARTED, false)
     }
 
-    fun notificationPosted(json: String): Completable {
-        val packet = Packet(Packet.PacketType.Notification, json.toByteArray().toList())
-        return gattDelegate.sendPacket(packet)
+    fun notificationPosted(key: String, title: String?, text: String?, subText: String?, icon: Int?): Completable {
+        return Single.fromCallable {
+            Log.e("$$$", "notificationPosted:$key, $title, $text, $subText, $icon")
+            val json = JsonObject().apply {
+                addProperty("key", key)
+                addProperty("title", title)
+                addProperty("text", text)
+                addProperty("sub", subText)
+                icon?.let { ContextCompat.getDrawable(this@BluetoothService, it) }
+                    ?.let {
+                        val outputStream = ByteArrayOutputStream()
+                        it.toBitmap().compress(Bitmap.CompressFormat.JPEG, 50, outputStream)
+                        Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
+                    }
+                    ?.also {
+                        addProperty("icon", it)
+                    }
+            }
+            Gson().toJson(json)
+        }
+            .map {
+                Log.e("$$$", "notificationPosted:$it")
+                Packet(Packet.PacketType.Notification, it.toByteArray().toList())
+            }
+            .subscribeOn(Schedulers.computation())
+            .flatMapCompletable { gattDelegate.sendPacket(it) }
     }
 
     companion object {
