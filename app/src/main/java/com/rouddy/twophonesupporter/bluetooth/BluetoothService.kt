@@ -1,5 +1,6 @@
 package com.rouddy.twophonesupporter.bluetooth
 
+import android.Manifest
 import android.app.*
 import android.content.Context
 import android.content.Intent
@@ -9,6 +10,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Base64
 import android.util.Log
+import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import com.algorigo.library.rx.Rx2ServiceBindingFactory
@@ -91,6 +93,7 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
         return Single.fromCallable { peripheralDisposable != null }
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     fun startPeripheral(): Completable {
         val subject = PublishSubject.create<Any>()
         return subject.ignoreElements()
@@ -102,6 +105,7 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
             }
     }
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     private fun startBluetooth(subject: Subject<Any>? = null) {
         if (peripheralDisposable != null) {
             subject?.onComplete()
@@ -146,7 +150,6 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
                 remove(KEY_STORED_CENTRAL_DEVICE)
             }
             .apply()
-        gattDelegate.disconnectDevice()
     }
 
     private fun setActAsPeripheralStarted(started: Boolean) {

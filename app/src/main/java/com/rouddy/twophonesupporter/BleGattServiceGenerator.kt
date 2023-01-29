@@ -43,10 +43,12 @@ object BleGattServiceGenerator {
             override fun onConnectionStateChange(device: BluetoothDevice?, status: Int, newState: Int) {
                 super.onConnectionStateChange(device, status, newState)
                 if (newState == BluetoothGattServer.STATE_CONNECTED) {
+                    gattServer.connect(device!!, false)
                     onConnected(device!!)
                 } else if (newState == BluetoothGattServer.STATE_DISCONNECTED
                     || newState == BluetoothGattServer.STATE_DISCONNECTING) {
                     Log.e("$$$", "DISCONNECTED : $newState")
+                    onDisconnected()
                 }
             }
 
@@ -129,6 +131,7 @@ object BleGattServiceGenerator {
                     gattServer
                 })
                 .doFinally {
+                    disconnectDevice()
                     gattServer.close()
                 }
         }
@@ -136,6 +139,10 @@ object BleGattServiceGenerator {
         fun onConnected(bluetoothDevice: BluetoothDevice) {
             connectedDevice = bluetoothDevice
             onConnected()
+        }
+
+        fun onDisconnected() {
+            connectedDevice = null
         }
 
         fun disconnectDevice() {
