@@ -20,7 +20,8 @@ import io.reactivex.rxjava3.subjects.BehaviorSubject
 
 object BleAdvertiser {
 
-    fun startAdvertising(context: Context): Observable<BluetoothLeAdvertiser> {
+    fun startAdvertising(context: Context, name: String): Observable<BluetoothLeAdvertiser> {
+        Log.e("$$$", "startAdvertising:${name.length}:$name")
         val connectedSubject = BehaviorSubject.create<BluetoothLeAdvertiser>()
         var bluetoothLeAdvertiser: BluetoothLeAdvertiser? = null
 
@@ -44,10 +45,14 @@ object BleAdvertiser {
             val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
             val bluetoothAdapter = bluetoothManager.adapter
 
+            val nameChanged = bluetoothAdapter.setName(name)
+            Log.e("$$$", "nameChanged:$nameChanged")
+            Thread.sleep(500L)
+
             bluetoothLeAdvertiser = bluetoothAdapter.bluetoothLeAdvertiser
             val settings = AdvertiseSettings
                 .Builder()
-                .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
+                .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_POWER)
                 .setConnectable(true)
                 .setTimeout(0)
                 .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
@@ -55,7 +60,7 @@ object BleAdvertiser {
 
             val data = AdvertiseData
                 .Builder()
-                .setIncludeDeviceName(false)
+                .setIncludeDeviceName(true)
                 .setIncludeTxPowerLevel(false)
                 .addServiceUuid(ParcelUuid(MyGattDelegate.SERVICE_UUID))
                 .build()

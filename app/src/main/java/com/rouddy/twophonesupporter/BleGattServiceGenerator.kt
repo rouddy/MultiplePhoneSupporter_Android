@@ -8,6 +8,7 @@ import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import com.jakewharton.rxrelay3.BehaviorRelay
+import com.jakewharton.rxrelay3.PublishRelay
 import com.rouddy.twophonesupporter.bluetooth.peripheral.MyGattDelegate
 import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Observable
@@ -22,6 +23,11 @@ object BleGattServiceGenerator {
         Indication,
     }
 
+    sealed class State {
+        class WaitForConnect : State()
+        class Connected(val device: BluetoothDevice) : State()
+    }
+
     @SuppressLint("MissingPermission")
     abstract class GattDelegate {
         private var connectedDevice: BluetoothDevice? = null
@@ -31,6 +37,8 @@ object BleGattServiceGenerator {
             get() = gattServerRelay.firstOrError().blockingGet()
         protected lateinit var address: String
             private set
+        private var stateRelay = BehaviorRelay.create<State>()
+            .apply { accept(State.WaitForConnect()) }
 
         val gattCallback = object : BluetoothGattServerCallback() {
             override fun onServiceAdded(status: Int, service: BluetoothGattService?) {
@@ -114,7 +122,7 @@ object BleGattServiceGenerator {
         }
 
         @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-        internal fun initialize(context: Context): Observable<BluetoothGattServer> {
+        internal fun initialize(context: Context): Observable<State> {
             return Completable.fromCallable {
                 val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
                 address = bluetoothManager.adapter.address
@@ -127,9 +135,9 @@ object BleGattServiceGenerator {
 
                 gattServer.addService(gattService)
             }
-                .andThen(gattServerRelay.zipWith(serviceAddedRelay) { gattServer, _ ->
-                    gattServer
-                })
+                .andThen(serviceAddedRelay)
+                .firstOrError()
+                .flatMapObservable { stateRelay }
                 .doFinally {
                     disconnectDevice()
                     gattServer.close()
@@ -139,10 +147,12 @@ object BleGattServiceGenerator {
         fun onConnected(bluetoothDevice: BluetoothDevice) {
             connectedDevice = bluetoothDevice
             onConnected()
+            stateRelay.accept(State.Connected(bluetoothDevice))
         }
 
         fun onDisconnected() {
             connectedDevice = null
+            stateRelay.accept(State.WaitForConnect())
         }
 
         fun disconnectDevice() {
@@ -163,7 +173,7 @@ object BleGattServiceGenerator {
     }
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
-    fun startServer(context: Context, gattDelegate: GattDelegate): Observable<BluetoothGattServer> {
+    fun startServer(context: Context, gattDelegate: GattDelegate): Observable<State> {
         return gattDelegate.initialize(context)
             .subscribeOn(Schedulers.io())
     }

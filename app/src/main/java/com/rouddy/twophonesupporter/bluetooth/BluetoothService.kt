@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Binder
 import android.os.Build
@@ -11,6 +12,7 @@ import android.os.IBinder
 import android.util.Base64
 import android.util.Log
 import androidx.annotation.RequiresPermission
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import com.algorigo.library.rx.Rx2ServiceBindingFactory
@@ -29,6 +31,7 @@ import io.reactivex.rxjava3.schedulers.Schedulers
 import io.reactivex.rxjava3.subjects.PublishSubject
 import io.reactivex.rxjava3.subjects.Subject
 import java.io.ByteArrayOutputStream
+import kotlin.math.roundToInt
 
 class BluetoothService : Service(), MyGattDelegate.Delegate {
 
@@ -39,16 +42,19 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
     }
 
     private val binder = ServiceBinder()
-
     private val gattDelegate = MyGattDelegate(this)
-
+    private lateinit var peripheralName: String
     private var peripheralDisposable: Disposable? = null
 
     override fun onCreate() {
         Log.e("$$$", "BluetoothService::onCreate")
         super.onCreate()
 
+        peripheralName = initPeripheralName()
         if (getActAsPeripheralStarted() && peripheralDisposable == null) {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                return
+            }
             startBluetooth()
         }
     }
@@ -114,12 +120,6 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
 
         peripheralDisposable = BleGattServiceGenerator
             .startServer(this, gattDelegate)
-            .flatMap {
-                BleAdvertiser.startAdvertising(this)
-            }
-            .doFinally {
-                peripheralDisposable = null
-            }
             .doOnNext {
                 if (subject?.hasComplete() == false) {
                     subject.onComplete()
@@ -129,6 +129,22 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
                 if (subject?.hasComplete() == false) {
                     subject.onError(it)
                 }
+            }
+            .switchMap {
+                when (it) {
+                    is BleGattServiceGenerator.State.WaitForConnect -> {
+                        BleAdvertiser.startAdvertising(this, peripheralName)
+                    }
+                    is BleGattServiceGenerator.State.Connected -> {
+                        Observable.empty()
+                    }
+                    else -> {
+                        Observable.error(IllegalStateException("state is wrong"))
+                    }
+                }
+            }
+            .doFinally {
+                peripheralDisposable = null
             }
             .subscribe({
             }, {
@@ -165,6 +181,22 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
     private fun getActAsPeripheralStarted(): Boolean {
         return getSharedPreferences(SHARED_PREFERENCE_NAME, Context.MODE_PRIVATE)
             .getBoolean(KEY_ACT_AS_PERIPHERAL_STARTED, false)
+    }
+
+    private fun initPeripheralName(): String {
+        return getSharedPreferences(SHARED_PREFERENCE_NAME, MODE_PRIVATE).run {
+            val name = getString(KEY_PERIPHERAL_NAME, null)
+            if (name != null) {
+                return@run name
+            }
+            val generated = (Math.random() * 16777215).roundToInt()
+            val byteArray = byteArrayOf(generated.toByte(), (generated shr 1).toByte(), (generated shr 2).toByte())
+            return Base64.encodeToString(byteArray, Base64.NO_PADDING or Base64.NO_WRAP).also {
+                edit().apply {
+                    putString(KEY_PERIPHERAL_NAME, it)
+                }.apply()
+            }
+        }
     }
 
     fun notificationPosted(key: String, title: String?, text: String?, subText: String?, icon: Int?): Completable {
@@ -232,6 +264,7 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
         private const val SHARED_PREFERENCE_NAME = "BluetoothServiceSP"
         private const val KEY_ACT_AS_PERIPHERAL_STARTED = "KeyActAsPeripheralStarted"
         private const val KEY_STORED_CENTRAL_DEVICE = "KeyStoredCentralDevice"
+        private const val KEY_PERIPHERAL_NAME = "KeyPeripheralName"
 
         private const val NOTIFICATION_CHANNEL_ID_BLUETOOTH_SERVICE = "NotificationChannelIdBluetoothService"
         private const val NOTIFICATION_ID_BLUETOOTH_SERVICE = 0x01410
