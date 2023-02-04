@@ -20,7 +20,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.rouddy.twophonesupporter.BleAdvertiser
 import com.rouddy.twophonesupporter.BleGattServiceGenerator
-import com.rouddy.twophonesupporter.MainActivity
+import com.rouddy.twophonesupporter.ui.MainActivity
 import com.rouddy.twophonesupporter.R
 import com.rouddy.twophonesupporter.bluetooth.peripheral.MyGattDelegate
 import io.reactivex.rxjava3.core.Completable
@@ -51,7 +51,7 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
         super.onCreate()
 
         peripheralName = initPeripheralName()
-        if (getActAsPeripheralStarted() && peripheralDisposable == null) {
+        if (getActAsPeripheralStarted(this) && peripheralDisposable == null) {
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                 return
             }
@@ -178,11 +178,6 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
             .apply()
     }
 
-    private fun getActAsPeripheralStarted(): Boolean {
-        return getSharedPreferences(SHARED_PREFERENCE_NAME, Context.MODE_PRIVATE)
-            .getBoolean(KEY_ACT_AS_PERIPHERAL_STARTED, false)
-    }
-
     private fun initPeripheralName(): String {
         return getSharedPreferences(SHARED_PREFERENCE_NAME, MODE_PRIVATE).run {
             val name = getString(KEY_PERIPHERAL_NAME, null)
@@ -259,6 +254,11 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
                     Intent(context, BluetoothService::class.java)
                 )
                 .map { it.getService() }
+        }
+
+        fun getActAsPeripheralStarted(context: Context): Boolean {
+            return context.getSharedPreferences(SHARED_PREFERENCE_NAME, Context.MODE_PRIVATE)
+                .getBoolean(KEY_ACT_AS_PERIPHERAL_STARTED, false)
         }
 
         private const val SHARED_PREFERENCE_NAME = "BluetoothServiceSP"

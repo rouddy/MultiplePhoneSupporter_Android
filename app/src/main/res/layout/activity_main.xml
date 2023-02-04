@@ -4,35 +4,14 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".MainActivity">
+    tools:context=".ui.MainActivity">
 
     <Button
-        android:id="@+id/act_as_peripheral_btn"
-        android:layout_width="wrap_content"
+        android:id="@+id/notification_relay_start_btn"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:drawableTop="@drawable/peripheral"
-        android:minWidth="200dp"
-        android:paddingTop="20dp"
-        android:paddingBottom="20dp"
-        android:text="Act as Peripheral"
-        app:layout_constraintBottom_toTopOf="@+id/act_as_central_btn"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
+        android:text="Start Notification Relay"
         app:layout_constraintTop_toTopOf="parent" />
-
-    <Button
-        android:id="@+id/act_as_central_btn"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:drawableTop="@drawable/central"
-        android:minWidth="200dp"
-        android:paddingTop="20dp"
-        android:paddingBottom="20dp"
-        android:text="Act as Central"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/act_as_peripheral_btn" />
 
     <Button
         android:id="@+id/check_button"
