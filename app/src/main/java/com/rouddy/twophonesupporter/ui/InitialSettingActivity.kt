@@ -55,15 +55,18 @@ class InitialSettingActivity : AppCompatActivity() {
         binding.actAsCentralBtn.setOnClickListener {
             Toast.makeText(this, "Act as Central is not supported yet", Toast.LENGTH_LONG).show()
         }
+        binding.finishBtn.setOnClickListener {
+            finishIfEnabled()
+        }
 
         if (Build.VERSION.SDK_INT >= 33) {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT) {
-                // Do Nothing
+                finishIfEnabled()
             }
         } else {
             onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
-                    // Do Nothing
+                    finishIfEnabled()
                 }
             })
         }
@@ -115,6 +118,12 @@ class InitialSettingActivity : AppCompatActivity() {
             .ignoreElement()
     } else {
         Completable.complete()
+    }
+
+    private fun finishIfEnabled() {
+        if (binding.finishBtn.isEnabled) {
+            finish()
+        }
     }
 
     companion object {
