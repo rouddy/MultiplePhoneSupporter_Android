@@ -71,9 +71,9 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
                 }
             }
             .subscribe({
-                Log.e("$$$", "received data relay ${it.joinToString(separator = "") { String.format("%02x", it) }}")
+                Log.e(LOG_TAG, "received data relay ${it.joinToString(separator = "") { String.format("%02x", it) }}")
             }, {
-                Log.e("$$$", "received data relay error", it)
+                Log.e(LOG_TAG, "received data relay error", it)
             })
             .addTo(compositeDisposable)
 
@@ -134,7 +134,7 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
             .subscribe({
                 callback.invoke(it)
             }, {
-                Log.e("$$$", "notification error", it)
+                Log.e(LOG_TAG, "notification error", it)
             })
     }
 
@@ -155,7 +155,7 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
     }
 
     private fun processPacket(packet: Packet) {
-        Log.e("$$$", "processPacket:${packet.type}:${packet.data.joinToString("") { String.format("%02x", it) }}")
+        Log.e(LOG_TAG, "processPacket:${packet.type}:${packet.data.joinToString("") { String.format("%02x", it) }}")
         when (packet.type) {
             Packet.PacketType.CheckVersion -> processVersion(packet.data)
             Packet.PacketType.CheckDevice -> processCheckDevice(packet.data)
@@ -168,7 +168,7 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
 
     private fun processVersion(data: List<Byte>) {
         val centralVersion = data.toByteArray().toInt(byteOrder = ByteOrder.LITTLE_ENDIAN)
-        Log.e("$$$", "centralVersion:$centralVersion")
+        Log.e(LOG_TAG, "centralVersion:$centralVersion")
         val json = JsonObject().apply {
             addProperty("versionOk", centralVersion == VERSION)
             addProperty("peripheralId", address)
@@ -179,9 +179,7 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
 
     private fun processCheckDevice(data: List<Byte>) {
         val receivedString = String(data.toByteArray())
-        Log.e("$$$", "receivedString:$receivedString")
         val receivedJson = Gson().fromJson(receivedString, CheckDeviceReceivedData::class.java)
-        Log.e("$$$", "receivedJson:$receivedJson")
         val receivedUuid = receivedJson.uuid
         val certificated = delegate.checkDeviceUuid(receivedUuid)
         val receivedOperatingSystem = OperatingSystem.valueFor(receivedJson.os)
@@ -197,7 +195,7 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
                 .subscribe({
                     disconnectDevice()
                 }, {
-                    Log.e("$$$", "timer error", it)
+                    Log.e(LOG_TAG, "timer error", it)
                 })
         }
     }
@@ -211,7 +209,7 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
             .subscribe({
                 disconnectDevice()
             }, {
-                Log.e("$$$", "timer error", it)
+                Log.e(LOG_TAG, "timer error", it)
             })
     }
 
@@ -222,6 +220,8 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
     }
 
     companion object {
+        private val LOG_TAG = MyGattDelegate::class.java.simpleName
+
         internal val VERSION = 0x01
 
         internal val SERVICE_UUID = UUID.fromString("6E400001-B5A3-F393-E0A9-0123456789AB")

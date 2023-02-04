@@ -11,24 +11,24 @@ import com.rouddy.twophonesupporter.bluetooth.BluetoothService
 class MyNotificationListenerService : NotificationListenerService() {
 
     override fun onDestroy() {
-        Log.e("$$$", "MyNotificationListenerService::onDestroy")
+        Log.e(LOG_TAG, "MyNotificationListenerService::onDestroy")
         super.onDestroy()
     }
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        Log.e("$$$", "NotificationListenerService::onListenerConnected")
+        Log.e(LOG_TAG, "onListenerConnected")
     }
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
-        Log.e("$$$", "NotificationListenerService::onListenerDisconnected")
+        Log.e(LOG_TAG, "onListenerDisconnected")
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
-        Log.e("$$$", "NotificationListenerService::onNotificationPosted:$sbn")
-        Log.e("$$$", "NotificationListenerService::extras:${sbn?.notification?.extras?.keySet()?.joinToString(",")}")
+        Log.e(LOG_TAG, "onNotificationPosted:$sbn")
+        Log.e(LOG_TAG, "extras:${sbn?.notification?.extras?.keySet()?.joinToString(",")}")
         sbn?.run {
             BluetoothService
                 .bindService(this@MyNotificationListenerService)
@@ -48,15 +48,19 @@ class MyNotificationListenerService : NotificationListenerService() {
                     )
                 }
                 .subscribe({
-                    Log.e("$$$", "NotificationListenerService::sendData complete")
+                    Log.e(LOG_TAG, "sendData complete")
                 }, {
-                    Log.e("$$$", "NotificationListenerService::sendData error", it)
+                    Log.e(LOG_TAG, "sendData error", it)
                 })
         }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         super.onNotificationRemoved(sbn)
-        Log.e("$$$", "NotificationListenerService::onNotificationRemoved:$sbn")
+        Log.e(LOG_TAG, "onNotificationRemoved:$sbn")
+    }
+
+    companion object {
+        private val LOG_TAG = MyNotificationListenerService::class.java.simpleName
     }
 }

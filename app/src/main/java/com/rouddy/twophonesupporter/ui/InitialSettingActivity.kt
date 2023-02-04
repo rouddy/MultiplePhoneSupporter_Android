@@ -37,11 +37,11 @@ class InitialSettingActivity : AppCompatActivity() {
             .firstOrError()
             .observeOn(AndroidSchedulers.mainThread())
             .subscribe({
-                Log.e("$$$", "peripheral success $it")
+                Log.e(LOG_TAG, "peripheral success $it")
                 binding.actAsPeripheralBtn.isSelected = it
                 binding.finishBtn.isEnabled = it
             }, {
-                Log.e("$$$", "peripheral check", it)
+                Log.e(LOG_TAG, "peripheral check", it)
             })
             .addTo(compositeDisposable)
 
@@ -77,11 +77,11 @@ class InitialSettingActivity : AppCompatActivity() {
             }
             .observeOn(AndroidSchedulers.mainThread())
             .subscribe({
-                Log.e("$$$", "start peripheral complete")
+                Log.e(LOG_TAG, "start peripheral complete")
                 binding.actAsPeripheralBtn.isSelected = true
                 binding.finishBtn.isEnabled = true
             }, {
-                Log.e("$$$", "peripheral error", it)
+                Log.e(LOG_TAG, "peripheral error", it)
             })
             .addTo(compositeDisposable)
     }
@@ -94,11 +94,11 @@ class InitialSettingActivity : AppCompatActivity() {
             }
             .observeOn(AndroidSchedulers.mainThread())
             .subscribe({
-                Log.e("$$$", "start peripheral complete")
+                Log.e(LOG_TAG, "start peripheral complete")
                 binding.actAsPeripheralBtn.isSelected = false
                 binding.finishBtn.isEnabled = false
             }, {
-                Log.e("$$$", "peripheral error", it)
+                Log.e(LOG_TAG, "peripheral error", it)
             })
             .addTo(compositeDisposable)
     }
@@ -115,5 +115,9 @@ class InitialSettingActivity : AppCompatActivity() {
             .ignoreElement()
     } else {
         Completable.complete()
+    }
+
+    companion object {
+        private val LOG_TAG = InitialSettingActivity::class.java.simpleName
     }
 }

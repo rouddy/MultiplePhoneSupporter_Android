@@ -21,7 +21,6 @@ import io.reactivex.rxjava3.subjects.BehaviorSubject
 object BleAdvertiser {
 
     fun startAdvertising(context: Context, name: String): Observable<BluetoothLeAdvertiser> {
-        Log.e("$$$", "startAdvertising:${name.length}:$name")
         val connectedSubject = BehaviorSubject.create<BluetoothLeAdvertiser>()
         var bluetoothLeAdvertiser: BluetoothLeAdvertiser? = null
 
@@ -46,7 +45,6 @@ object BleAdvertiser {
             val bluetoothAdapter = bluetoothManager.adapter
 
             val nameChanged = bluetoothAdapter.setName(name)
-            Log.e("$$$", "nameChanged:$nameChanged")
             Thread.sleep(500L)
 
             bluetoothLeAdvertiser = bluetoothAdapter.bluetoothLeAdvertiser

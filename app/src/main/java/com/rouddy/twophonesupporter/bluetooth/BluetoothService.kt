@@ -47,7 +47,7 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
     private var peripheralDisposable: Disposable? = null
 
     override fun onCreate() {
-        Log.e("$$$", "BluetoothService::onCreate")
+        Log.e(LOG_TAG, "BluetoothService::onCreate")
         super.onCreate()
 
         peripheralName = initPeripheralName()
@@ -148,7 +148,7 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
             }
             .subscribe({
             }, {
-                Log.e("$$$", "start bluetooth error", it)
+                Log.e(LOG_TAG, "start bluetooth error", it)
             })
     }
 
@@ -196,7 +196,7 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
 
     fun notificationPosted(key: String, title: String?, text: String?, subText: String?, icon: Int?): Completable {
         return Single.fromCallable {
-            Log.e("$$$", "notificationPosted:$key, $title, $text, $subText, $icon")
+            Log.e(LOG_TAG, "notificationPosted:$key, $title, $text, $subText, $icon")
             val json = JsonObject().apply {
                 addProperty("key", key)
                 addProperty("title", title)
@@ -215,7 +215,6 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
             Gson().toJson(json)
         }
             .map {
-                Log.e("$$$", "notificationPosted:$it")
                 Packet(Packet.PacketType.Notification, it.toByteArray().toList())
             }
             .subscribeOn(Schedulers.computation())
@@ -247,6 +246,8 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
     }
 
     companion object {
+        private val LOG_TAG = BluetoothService::class.java.simpleName
+
         fun bindService(context: Context): Observable<BluetoothService> {
             return Rx2ServiceBindingFactory
                 .bind<ServiceBinder>(

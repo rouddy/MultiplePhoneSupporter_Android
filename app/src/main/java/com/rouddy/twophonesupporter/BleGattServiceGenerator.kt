@@ -55,7 +55,6 @@ object BleGattServiceGenerator {
                     onConnected(device!!)
                 } else if (newState == BluetoothGattServer.STATE_DISCONNECTED
                     || newState == BluetoothGattServer.STATE_DISCONNECTING) {
-                    Log.e("$$$", "DISCONNECTED : $newState")
                     onDisconnected()
                 }
             }
