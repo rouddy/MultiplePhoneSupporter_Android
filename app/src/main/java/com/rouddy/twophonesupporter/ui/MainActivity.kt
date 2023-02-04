@@ -3,8 +3,11 @@ package com.rouddy.twophonesupporter.ui
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.view.Menu
+import android.view.MenuItem
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationManagerCompat
+import com.rouddy.twophonesupporter.R
 import com.rouddy.twophonesupporter.bluetooth.BluetoothService
 import com.rouddy.twophonesupporter.databinding.ActivityMainBinding
 import io.reactivex.rxjava3.disposables.CompositeDisposable
@@ -43,6 +46,23 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         binding.notificationRelayStartBtn.isEnabled = !checkNotificationPermissionGrantred()
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.main, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_settings -> {
+                Intent(this, SettingActivity::class.java).also {
+                    startActivity(it)
+                }
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
     }
 
     private fun checkNotificationPermissionGrantred(): Boolean {

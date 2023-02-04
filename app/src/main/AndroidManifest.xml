@@ -29,6 +29,9 @@
         <activity
             android:name=".ui.InitialSettingActivity"
             android:exported="false" />
+        <activity
+            android:name=".ui.SettingActivity"
+            android:exported="false" />
 
         <service
             android:name=".MyNotificationListenerService"
