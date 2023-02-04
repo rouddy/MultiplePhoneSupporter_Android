@@ -48,6 +48,7 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
     private lateinit var receivedDataRelay: BehaviorRelay<ByteArray>
     private val receivedPacketRelay = PublishRelay.create<Packet>()
     private val sendPacketRelay = PublishRelay.create<Packet>()
+    private var operatingSystem: OperatingSystem? = null
 
     override fun onConnected() {
         receivedDataRelay = BehaviorRelay
@@ -182,7 +183,7 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
         val receivedJson = Gson().fromJson(receivedString, CheckDeviceReceivedData::class.java)
         val receivedUuid = receivedJson.uuid
         val certificated = delegate.checkDeviceUuid(receivedUuid)
-        val receivedOperatingSystem = OperatingSystem.valueFor(receivedJson.os)
+        operatingSystem = OperatingSystem.valueFor(receivedJson.os)
         val json = JsonObject().apply {
             addProperty("vaildDevice", certificated)
             addProperty("os", OperatingSystem.Android.byte)
