@@ -32,6 +32,9 @@
         <activity
             android:name=".ui.SettingActivity"
             android:exported="false" />
+        <activity
+            android:name=".ui.CreditActivity"
+            android:exported="false" />
 
         <service
             android:name=".MyNotificationListenerService"

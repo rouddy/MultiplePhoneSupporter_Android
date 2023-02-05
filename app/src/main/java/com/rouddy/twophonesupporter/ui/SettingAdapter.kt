@@ -7,17 +7,12 @@ import com.rouddy.twophonesupporter.databinding.ItemSettingBinding
 
 class SettingAdapter(private val listener: Listener) : RecyclerView.Adapter<SettingAdapter.SettingViewHolder>() {
 
-    enum class Settings(val text: String) {
-        Connection("Connection"),
-        Credit("Credit"),
-    }
-
     interface Listener {
-        fun onSettingClick(settings: Settings)
+        fun onSettingClick(settings: SettingActivity.Settings)
     }
 
     inner class SettingViewHolder(val binding: ItemSettingBinding) : RecyclerView.ViewHolder(binding.root) {
-        fun setSetting(settings: Settings) {
+        fun setSetting(settings: SettingActivity.Settings) {
             binding.titleView.text = settings.text
             binding.root.setOnClickListener {
                 listener.onSettingClick(settings)
@@ -31,10 +26,10 @@ class SettingAdapter(private val listener: Listener) : RecyclerView.Adapter<Sett
     }
 
     override fun onBindViewHolder(holder: SettingViewHolder, position: Int) {
-        holder.setSetting(Settings.values()[position])
+        holder.setSetting(SettingActivity.Settings.values()[position])
     }
 
     override fun getItemCount(): Int {
-        return Settings.values().size
+        return SettingActivity.Settings.values().size
     }
 }

@@ -10,6 +10,11 @@ import com.rouddy.twophonesupporter.databinding.ActivitySettingBinding
 
 class SettingActivity : AppCompatActivity(), SettingAdapter.Listener {
 
+    enum class Settings(val text: String) {
+        Connection("Connection"),
+        Credit("Credit"),
+    }
+
     private lateinit var binding: ActivitySettingBinding
     private val adapter = SettingAdapter(this)
 
@@ -35,15 +40,17 @@ class SettingActivity : AppCompatActivity(), SettingAdapter.Listener {
         }
     }
 
-    override fun onSettingClick(settings: SettingAdapter.Settings) {
+    override fun onSettingClick(settings: Settings) {
         when (settings) {
-            SettingAdapter.Settings.Connection -> {
+            Settings.Connection -> {
                 Intent(this, InitialSettingActivity::class.java).also {
                     startActivity(it)
                 }
             }
-            SettingAdapter.Settings.Credit -> {
-
+            Settings.Credit -> {
+                Intent(this, CreditActivity::class.java).also {
+                    startActivity(it)
+                }
             }
         }
     }
