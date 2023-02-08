@@ -18,6 +18,7 @@ import androidx.core.graphics.drawable.toBitmap
 import com.algorigo.library.rx.Rx2ServiceBindingFactory
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.jakewharton.rxrelay3.BehaviorRelay
 import com.rouddy.twophonesupporter.BleAdvertiser
 import com.rouddy.twophonesupporter.BleGattServiceGenerator
 import com.rouddy.twophonesupporter.ui.MainActivity
@@ -45,6 +46,9 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
     private val gattDelegate = MyGattDelegate(this)
     private lateinit var peripheralName: String
     private var peripheralDisposable: Disposable? = null
+    private val peripheralConnectedRelay = BehaviorRelay.create<Boolean>().apply {
+        accept(false)
+    }
 
     override fun onCreate() {
         Log.e(LOG_TAG, "BluetoothService::onCreate")
@@ -133,9 +137,11 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
             .switchMap {
                 when (it) {
                     is BleGattServiceGenerator.State.WaitForConnect -> {
+                        peripheralConnectedRelay.accept(false)
                         BleAdvertiser.startAdvertising(this, peripheralName)
                     }
                     is BleGattServiceGenerator.State.Connected -> {
+                        peripheralConnectedRelay.accept(true)
                         Observable.empty()
                     }
                     else -> {
@@ -166,6 +172,10 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
                 remove(KEY_STORED_CENTRAL_DEVICE)
             }
             .apply()
+    }
+
+    fun getPeripheralConnectedObservable(): Observable<Boolean> {
+        return peripheralConnectedRelay
     }
 
     private fun setActAsPeripheralStarted(started: Boolean) {
