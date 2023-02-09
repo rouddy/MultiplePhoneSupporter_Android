@@ -159,10 +159,11 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
     }
 
     fun stopPeripheral(): Completable {
-        return Completable.fromCallable {
-            peripheralDisposable?.dispose()
-            setActAsPeripheralStarted(false)
-        }
+        return gattDelegate.sendPacket(Packet(Packet.PacketType.ClearDevice, listOf()))
+            .doOnComplete {
+                peripheralDisposable?.dispose()
+                setActAsPeripheralStarted(false)
+            }
     }
 
     fun clearPeripheral() {
