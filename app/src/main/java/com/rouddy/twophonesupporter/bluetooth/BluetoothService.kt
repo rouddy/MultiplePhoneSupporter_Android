@@ -27,7 +27,9 @@ import com.rouddy.twophonesupporter.bluetooth.peripheral.MyGattDelegate
 import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
+import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.disposables.Disposable
+import io.reactivex.rxjava3.kotlin.addTo
 import io.reactivex.rxjava3.schedulers.Schedulers
 import io.reactivex.rxjava3.subjects.PublishSubject
 import io.reactivex.rxjava3.subjects.Subject
@@ -42,6 +44,39 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
         }
     }
 
+    private class PackageNameFilter(val packageNames: Set<String>) {
+        val filterRelay = BehaviorRelay.create<Set<String>>()
+            .apply {
+                accept(packageNames)
+            }
+
+        fun addFilter(packageName: String) {
+            filterRelay
+                .firstOrError()
+                .blockingGet()
+                .let {
+                    it + setOf(packageName)
+                }
+                .also {
+                    filterRelay.accept(it)
+                }
+        }
+
+        fun removeFilter(packageName: String) {
+            filterRelay
+                .firstOrError()
+                .blockingGet()
+                .let {
+                    it.toMutableSet().apply {
+                        remove(packageName)
+                    }
+                }
+                .also {
+                    filterRelay.accept(it)
+                }
+        }
+    }
+
     private val binder = ServiceBinder()
     private val gattDelegate = MyGattDelegate(this)
     private lateinit var peripheralName: String
@@ -49,6 +84,8 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
     private val peripheralConnectedRelay = BehaviorRelay.create<Boolean>().apply {
         accept(false)
     }
+    private lateinit var packageNameFilter: PackageNameFilter
+    private val compositeDisposable = CompositeDisposable()
 
     override fun onCreate() {
         Log.e(LOG_TAG, "BluetoothService::onCreate")
@@ -61,6 +98,13 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
             }
             startBluetooth()
         }
+
+        packageNameFilter = PackageNameFilter(getPackageNamesFilter())
+        packageNameFilter.filterRelay
+            .subscribe({
+                setPackageNamesFilter(it)
+            })
+            .addTo(compositeDisposable)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -179,6 +223,53 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
         return peripheralConnectedRelay
     }
 
+    fun notificationPosted(key: String, title: String?, text: String?, subText: String?, icon: Int?): Completable {
+        return packageNameFilter.filterRelay
+            .firstOrError()
+            .flatMapCompletable {
+                if (it.contains(key)) {
+                    Single.fromCallable {
+                        Log.e(LOG_TAG, "notificationPosted:$key, $title, $text, $subText, $icon")
+                        val json = JsonObject().apply {
+                            addProperty("key", key)
+                            addProperty("title", title)
+                            addProperty("text", text)
+                            addProperty("sub", subText)
+                            icon?.let { ContextCompat.getDrawable(this@BluetoothService, it) }
+                                ?.let {
+                                    val outputStream = ByteArrayOutputStream()
+                                    it.toBitmap().compress(Bitmap.CompressFormat.JPEG, 50, outputStream)
+                                    Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
+                                }
+                                ?.also {
+                                    addProperty("icon", it)
+                                }
+                        }
+                        Gson().toJson(json)
+                    }
+                        .map {
+                            Packet(Packet.PacketType.Notification, it.toByteArray().toList())
+                        }
+                        .subscribeOn(Schedulers.computation())
+                        .flatMapCompletable { gattDelegate.sendPacket(it) }
+                } else {
+                    Completable.complete()
+                }
+            }
+    }
+
+    fun getFilterObservable(): Observable<Set<String>> {
+        return packageNameFilter.filterRelay
+    }
+
+    fun addFilter(packageName: String) {
+        packageNameFilter.addFilter(packageName)
+    }
+
+    fun removeFilter(packageName: String) {
+        packageNameFilter.removeFilter(packageName)
+    }
+
     private fun setActAsPeripheralStarted(started: Boolean) {
         clearPeripheral()
         getSharedPreferences(SHARED_PREFERENCE_NAME, Context.MODE_PRIVATE)
@@ -205,31 +296,22 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
         }
     }
 
-    fun notificationPosted(key: String, title: String?, text: String?, subText: String?, icon: Int?): Completable {
-        return Single.fromCallable {
-            Log.e(LOG_TAG, "notificationPosted:$key, $title, $text, $subText, $icon")
-            val json = JsonObject().apply {
-                addProperty("key", key)
-                addProperty("title", title)
-                addProperty("text", text)
-                addProperty("sub", subText)
-                icon?.let { ContextCompat.getDrawable(this@BluetoothService, it) }
-                    ?.let {
-                        val outputStream = ByteArrayOutputStream()
-                        it.toBitmap().compress(Bitmap.CompressFormat.JPEG, 50, outputStream)
-                        Base64.encodeToString(outputStream.toByteArray(), Base64.DEFAULT)
-                    }
-                    ?.also {
-                        addProperty("icon", it)
-                    }
+    private fun getPackageNamesFilter(): MutableSet<String> {
+        return getSharedPreferences(SHARED_PREFERENCE_NAME, Context.MODE_PRIVATE)
+            .getStringSet(
+                PACKAGE_NAMES_FILTER_KEY, setOf<String>()
+            )
+            ?.toMutableSet()
+            ?: mutableSetOf()
+    }
+
+    private fun setPackageNamesFilter(set: Set<String>) {
+        getSharedPreferences(SHARED_PREFERENCE_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .apply {
+                putStringSet(PACKAGE_NAMES_FILTER_KEY, set)
             }
-            Gson().toJson(json)
-        }
-            .map {
-                Packet(Packet.PacketType.Notification, it.toByteArray().toList())
-            }
-            .subscribeOn(Schedulers.computation())
-            .flatMapCompletable { gattDelegate.sendPacket(it) }
+            .apply()
     }
 
     override fun checkDeviceUuid(uuid: String): Boolean {
@@ -277,6 +359,7 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
         private const val KEY_ACT_AS_PERIPHERAL_STARTED = "KeyActAsPeripheralStarted"
         private const val KEY_STORED_CENTRAL_DEVICE = "KeyStoredCentralDevice"
         private const val KEY_PERIPHERAL_NAME = "KeyPeripheralName"
+        private const val PACKAGE_NAMES_FILTER_KEY = "PackageNamesFilterKey"
 
         private const val NOTIFICATION_CHANNEL_ID_BLUETOOTH_SERVICE = "NotificationChannelIdBluetoothService"
         private const val NOTIFICATION_ID_BLUETOOTH_SERVICE = 0x01410
