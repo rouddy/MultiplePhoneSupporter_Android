@@ -4,9 +4,11 @@ import android.Manifest
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
 import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.rouddy.twophonesupporter.bluetooth.BluetoothService
 import com.rouddy.twophonesupporter.databinding.ActivityInitialSettingBinding
@@ -31,15 +33,37 @@ class InitialSettingActivity : AppCompatActivity() {
 
         BluetoothService
             .bindService(this)
-            .flatMapSingle {
-                it.checkPeripheralStarted()
+            .flatMap {
+                it.getPeripheralStateObservable()
             }
-            .firstOrError()
             .observeOn(AndroidSchedulers.mainThread())
             .subscribe({
                 Log.e(LOG_TAG, "peripheral success $it")
-                binding.actAsPeripheralBtn.isSelected = it
-                binding.finishBtn.isEnabled = it
+                when (it) {
+                    is BluetoothService.PeripheralState.Stop -> {
+                        binding.actAsPeripheralBtn.isSelected = false
+                        binding.finishBtn.isEnabled = false
+                        binding.peripheralStateView.visibility = View.GONE
+                    }
+                    is BluetoothService.PeripheralState.Advertising -> {
+                        binding.actAsPeripheralBtn.isSelected = true
+                        binding.finishBtn.isEnabled = true
+                        binding.peripheralStateView.visibility = View.GONE
+                    }
+                    is BluetoothService.PeripheralState.WaitForConnect -> {
+                        binding.actAsPeripheralBtn.isSelected = true
+                        binding.finishBtn.isEnabled = true
+                        binding.peripheralStateView.visibility = View.VISIBLE
+                        binding.peripheralStateView.text = "Wait For Connect Device ${it.macAddress}"
+                    }
+                    is BluetoothService.PeripheralState.Connected -> {
+                        binding.actAsPeripheralBtn.isSelected = true
+                        binding.finishBtn.isEnabled = true
+                        binding.peripheralStateView.visibility = View.VISIBLE
+                        binding.peripheralStateView.text = "Device ${it.macAddress} is Connected"
+                    }
+                }
+
             }, {
                 Log.e(LOG_TAG, "peripheral check", it)
             })
@@ -47,7 +71,16 @@ class InitialSettingActivity : AppCompatActivity() {
 
         binding.actAsPeripheralBtn.setOnClickListener {
             if (binding.actAsPeripheralBtn.isSelected) {
-                stopActAsPeripheral()
+                AlertDialog.Builder(this)
+                    .setTitle("Do you want to stop peripheral?")
+                    .setPositiveButton("Stop") { _, _ ->
+                        stopActAsPeripheral()
+                    }
+                    .setNegativeButton("Keep Alive") { _, _ ->
+
+                    }
+                    .create()
+                    .show()
             } else {
                 startActAsPeripheral()
             }
@@ -81,7 +114,6 @@ class InitialSettingActivity : AppCompatActivity() {
             .observeOn(AndroidSchedulers.mainThread())
             .subscribe({
                 Log.e(LOG_TAG, "start peripheral complete")
-                binding.actAsPeripheralBtn.isSelected = true
                 binding.finishBtn.isEnabled = true
             }, {
                 Log.e(LOG_TAG, "peripheral error", it)
@@ -98,7 +130,6 @@ class InitialSettingActivity : AppCompatActivity() {
             .observeOn(AndroidSchedulers.mainThread())
             .subscribe({
                 Log.e(LOG_TAG, "start peripheral complete")
-                binding.actAsPeripheralBtn.isSelected = false
                 binding.finishBtn.isEnabled = false
             }, {
                 Log.e(LOG_TAG, "peripheral error", it)

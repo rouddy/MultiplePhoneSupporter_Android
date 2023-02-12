@@ -143,13 +143,12 @@ object BleGattServiceGenerator {
                 }
         }
 
-        fun onConnected(bluetoothDevice: BluetoothDevice) {
+        open fun onConnected(bluetoothDevice: BluetoothDevice) {
             connectedDevice = bluetoothDevice
-            onConnected()
             stateRelay.accept(State.Connected(bluetoothDevice))
         }
 
-        fun onDisconnected() {
+        open fun onDisconnected() {
             connectedDevice = null
             stateRelay.accept(State.WaitForConnect())
         }
@@ -161,7 +160,6 @@ object BleGattServiceGenerator {
             connectedDevice = null
         }
 
-        abstract fun onConnected()
         abstract fun getCharacteris(): List<BluetoothGattCharacteristic>
         abstract fun getReadResponse(uuid: UUID): ByteArray
         abstract fun getWriteResponse(uuid: UUID, data: ByteArray): ByteArray

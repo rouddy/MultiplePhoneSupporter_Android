@@ -50,8 +50,9 @@ class MainActivity : AppCompatActivity() {
 
         BluetoothService.bindService(this)
             .flatMap {
-                it.getPeripheralConnectedObservable()
+                it.getPeripheralStateObservable()
             }
+            .map { it is BluetoothService.PeripheralState.Connected }
             .observeOn(AndroidSchedulers.mainThread())
             .subscribe({
                 if (it) {

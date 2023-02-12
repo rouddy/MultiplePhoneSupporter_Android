@@ -38,7 +38,7 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
     }
 
     interface Delegate {
-        fun checkDeviceUuid(uuid: String): Boolean
+        fun checkDeviceUuid(uuid: String, macAddress: String): Boolean
         fun clearDeviceUuid()
     }
 
@@ -49,8 +49,11 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
     private val receivedPacketRelay = PublishRelay.create<Packet>()
     private val sendPacketRelay = PublishRelay.create<Packet>()
     private var operatingSystem: OperatingSystem? = null
+    private var connectedMacAddress: String? = null
 
-    override fun onConnected() {
+    override fun onConnected(bluetoothDevice: BluetoothDevice) {
+        super.onConnected(bluetoothDevice)
+        connectedMacAddress = bluetoothDevice.address
         receivedDataRelay = BehaviorRelay
             .create<ByteArray>()
             .apply {
@@ -89,6 +92,11 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
 
             })
             .addTo(compositeDisposable)
+    }
+
+    override fun onDisconnected() {
+        super.onDisconnected()
+        connectedMacAddress = null
     }
 
     override fun getCharacteris(): List<BluetoothGattCharacteristic> {
@@ -182,7 +190,7 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
         val receivedString = String(data.toByteArray())
         val receivedJson = Gson().fromJson(receivedString, CheckDeviceReceivedData::class.java)
         val receivedUuid = receivedJson.uuid
-        val certificated = delegate.checkDeviceUuid(receivedUuid)
+        val certificated = delegate.checkDeviceUuid(receivedUuid, connectedMacAddress!!)
         operatingSystem = OperatingSystem.valueFor(receivedJson.os)
         val json = JsonObject().apply {
             addProperty("vaildDevice", certificated)
