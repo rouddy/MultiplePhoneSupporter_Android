@@ -40,27 +40,27 @@ class InitialSettingActivity : AppCompatActivity() {
             .subscribe({
                 Log.e(LOG_TAG, "peripheral success $it")
                 when (it) {
-                    is BluetoothService.PeripheralState.Stop -> {
+                    BluetoothService.PeripheralState.Stop -> {
                         binding.actAsPeripheralBtn.isSelected = false
                         binding.finishBtn.isEnabled = false
                         binding.peripheralStateView.visibility = View.GONE
                     }
-                    is BluetoothService.PeripheralState.Advertising -> {
+                    BluetoothService.PeripheralState.Advertising -> {
                         binding.actAsPeripheralBtn.isSelected = true
                         binding.finishBtn.isEnabled = true
                         binding.peripheralStateView.visibility = View.GONE
                     }
-                    is BluetoothService.PeripheralState.WaitForConnect -> {
+                    BluetoothService.PeripheralState.WaitForConnect -> {
                         binding.actAsPeripheralBtn.isSelected = true
                         binding.finishBtn.isEnabled = true
                         binding.peripheralStateView.visibility = View.VISIBLE
-                        binding.peripheralStateView.text = "Wait For Connect Device ${it.macAddress}"
+                        binding.peripheralStateView.text = "Wait For Connect Device"
                     }
-                    is BluetoothService.PeripheralState.Connected -> {
+                    BluetoothService.PeripheralState.Connected -> {
                         binding.actAsPeripheralBtn.isSelected = true
                         binding.finishBtn.isEnabled = true
                         binding.peripheralStateView.visibility = View.VISIBLE
-                        binding.peripheralStateView.text = "Device ${it.macAddress} is Connected"
+                        binding.peripheralStateView.text = "Device is Connected"
                     }
                 }
 

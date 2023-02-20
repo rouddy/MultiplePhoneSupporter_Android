@@ -8,6 +8,11 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.rouddy.twophonesupporter.bluetooth.BluetoothService
 
+data class NotificationData(val key: String, val title: String?, val text: String?, val subText: String?, val icon: Int?) {
+    val packageName: String
+        get() = key.split("|")[1]
+}
+
 class MyNotificationListenerService : NotificationListenerService() {
 
     override fun onDestroy() {
@@ -33,7 +38,7 @@ class MyNotificationListenerService : NotificationListenerService() {
             BluetoothService
                 .bindService(this@MyNotificationListenerService)
                 .flatMapFirstCompletable {
-                    it.notificationPosted(
+                    it.notificationPosted(NotificationData(
                         key,
                         notification.extras.getString(Notification.EXTRA_TITLE),
                         notification.extras.getString(Notification.EXTRA_TEXT),
@@ -45,7 +50,7 @@ class MyNotificationListenerService : NotificationListenerService() {
                                 null
                             }
                         }
-                    )
+                    ))
                 }
                 .subscribe({
                     Log.e(LOG_TAG, "sendData complete")

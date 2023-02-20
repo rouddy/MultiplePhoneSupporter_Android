@@ -52,7 +52,7 @@ class MainActivity : AppCompatActivity() {
             .flatMap {
                 it.getPeripheralStateObservable()
             }
-            .map { it is BluetoothService.PeripheralState.Connected }
+            .map { it == BluetoothService.PeripheralState.Connected }
             .observeOn(AndroidSchedulers.mainThread())
             .subscribe({
                 if (it) {

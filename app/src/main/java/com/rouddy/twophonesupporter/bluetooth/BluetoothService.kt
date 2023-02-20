@@ -21,6 +21,7 @@ import com.google.gson.JsonObject
 import com.jakewharton.rxrelay3.BehaviorRelay
 import com.rouddy.twophonesupporter.BleAdvertiser
 import com.rouddy.twophonesupporter.BleGattServiceGenerator
+import com.rouddy.twophonesupporter.NotificationData
 import com.rouddy.twophonesupporter.ui.MainActivity
 import com.rouddy.twophonesupporter.R
 import com.rouddy.twophonesupporter.bluetooth.peripheral.MyGattDelegate
@@ -44,11 +45,11 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
         }
     }
 
-    sealed class PeripheralState {
-        object Stop : PeripheralState()
-        object Advertising : PeripheralState()
-        class WaitForConnect(val macAddress: String) : PeripheralState()
-        class Connected(val macAddress: String) : PeripheralState()
+    enum class PeripheralState {
+        Stop,
+        Advertising,
+        WaitForConnect,
+        Connected,
     }
 
     private class PackageNameFilter(val packageNames: Set<String>) {
@@ -103,10 +104,10 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                 return
             }
-            val storedMac = getSharedPreferences(SHARED_PREFERENCE_NAME, Context.MODE_PRIVATE)
-                .getString(KEY_STORED_CENTRAL_MAC_ADDRESS, null)
-            if (storedMac != null) {
-                peripheralStateRelay.accept(PeripheralState.WaitForConnect(storedMac))
+            val stored = getSharedPreferences(SHARED_PREFERENCE_NAME, Context.MODE_PRIVATE)
+                .getString(KEY_STORED_CENTRAL_DEVICE, null)
+            if (stored != null) {
+                peripheralStateRelay.accept(PeripheralState.WaitForConnect)
             } else {
                 peripheralStateRelay.accept(PeripheralState.Advertising)
             }
@@ -191,17 +192,17 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
             .switchMap {
                 when (it) {
                     is BleGattServiceGenerator.State.WaitForConnect -> {
-                        val storedMac = getSharedPreferences(SHARED_PREFERENCE_NAME, Context.MODE_PRIVATE)
-                            .getString(KEY_STORED_CENTRAL_MAC_ADDRESS, null)
-                        if (storedMac != null) {
-                            peripheralStateRelay.accept(PeripheralState.WaitForConnect(storedMac))
+                        val stored = getSharedPreferences(SHARED_PREFERENCE_NAME, Context.MODE_PRIVATE)
+                            .getString(KEY_STORED_CENTRAL_DEVICE, null)
+                        if (stored != null) {
+                            peripheralStateRelay.accept(PeripheralState.WaitForConnect)
                         } else {
                             peripheralStateRelay.accept(PeripheralState.Advertising)
                         }
                         BleAdvertiser.startAdvertising(this, peripheralName)
                     }
                     is BleGattServiceGenerator.State.Connected -> {
-                        peripheralStateRelay.accept(PeripheralState.Connected(it.device.address))
+                        peripheralStateRelay.accept(PeripheralState.Connected)
                         Observable.empty()
                     }
                     else -> {
@@ -231,7 +232,6 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
             .edit()
             .apply {
                 remove(KEY_STORED_CENTRAL_DEVICE)
-                remove(KEY_STORED_CENTRAL_MAC_ADDRESS)
             }
             .apply()
     }
@@ -240,19 +240,20 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
         return peripheralStateRelay
     }
 
-    fun notificationPosted(key: String, title: String?, text: String?, subText: String?, icon: Int?): Completable {
+    fun notificationPosted(notificationData: NotificationData): Completable {
         return packageNameFilter.filterRelay
             .firstOrError()
             .flatMapCompletable {
-                if (it.contains(key)) {
+                Log.e("!!!", "key: ${notificationData.packageName} vs package filter:${it.joinToString(",")}")
+                if (it.contains(notificationData.packageName)) {
                     Single.fromCallable {
-                        Log.e(LOG_TAG, "notificationPosted:$key, $title, $text, $subText, $icon")
+                        Log.e(LOG_TAG, "notificationPosted:${notificationData.key}, ${notificationData.title}, ${notificationData.text}, ${notificationData.subText}, ${notificationData.icon}")
                         val json = JsonObject().apply {
-                            addProperty("key", key)
-                            addProperty("title", title)
-                            addProperty("text", text)
-                            addProperty("sub", subText)
-                            icon?.let { ContextCompat.getDrawable(this@BluetoothService, it) }
+                            addProperty("key", notificationData.key)
+                            addProperty("title", notificationData.title)
+                            addProperty("text", notificationData.text)
+                            addProperty("sub", notificationData.subText)
+                            notificationData.icon?.let { ContextCompat.getDrawable(this@BluetoothService, it) }
                                 ?.let {
                                     val outputStream = ByteArrayOutputStream()
                                     it.toBitmap().compress(Bitmap.CompressFormat.JPEG, 50, outputStream)
@@ -331,18 +332,15 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
             .apply()
     }
 
-    override fun checkDeviceUuid(uuid: String, macAddress: String): Boolean {
+    override fun checkDeviceUuid(uuid: String): Boolean {
         return getSharedPreferences(SHARED_PREFERENCE_NAME, Context.MODE_PRIVATE)
             .run {
                 val stored = getString(KEY_STORED_CENTRAL_DEVICE, null)
-                val storedMac = getString(KEY_STORED_CENTRAL_MAC_ADDRESS, null)
-                if (stored != null && storedMac != null) {
+                if (stored != null) {
                     stored.compareTo(uuid) == 0
-                            && storedMac.compareTo(macAddress) == 0
                 } else {
                     edit().apply {
                         putString(KEY_STORED_CENTRAL_DEVICE, uuid)
-                        putString(KEY_STORED_CENTRAL_MAC_ADDRESS, macAddress)
                     }.apply()
                     true
                 }
@@ -354,7 +352,6 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
             .edit()
             .apply {
                 remove(KEY_STORED_CENTRAL_DEVICE)
-                remove(KEY_STORED_CENTRAL_MAC_ADDRESS)
             }
             .apply()
     }
@@ -379,7 +376,6 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
         private const val SHARED_PREFERENCE_NAME = "BluetoothServiceSP"
         private const val KEY_ACT_AS_PERIPHERAL_STARTED = "KeyActAsPeripheralStarted"
         private const val KEY_STORED_CENTRAL_DEVICE = "KeyStoredCentralDevice"
-        private const val KEY_STORED_CENTRAL_MAC_ADDRESS = "KeyStoredCentralMacAddress"
         private const val KEY_PERIPHERAL_NAME = "KeyPeripheralName"
         private const val PACKAGE_NAMES_FILTER_KEY = "PackageNamesFilterKey"
 
