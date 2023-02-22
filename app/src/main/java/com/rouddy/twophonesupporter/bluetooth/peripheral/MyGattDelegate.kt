@@ -13,6 +13,8 @@ import com.jakewharton.rxrelay3.PublishRelay
 import com.rouddy.twophonesupporter.BleGattServiceGenerator
 import com.rouddy.twophonesupporter.bluetooth.Packet
 import com.rouddy.twophonesupporter.bluetooth.data.CheckDeviceReceivedData
+import com.rouddy.twophonesupporter.bluetooth.hex
+import com.rouddy.twophonesupporter.bluetooth.log
 import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.disposables.Disposable
@@ -21,6 +23,7 @@ import io.reactivex.rxjava3.schedulers.Schedulers
 import java.nio.ByteOrder
 import java.util.*
 import java.util.concurrent.TimeUnit
+import java.util.logging.Logger
 
 @SuppressLint("MissingPermission")
 class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.GattDelegate() {
@@ -49,6 +52,11 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
     private val receivedPacketRelay = PublishRelay.create<Packet>()
     private val sendPacketRelay = PublishRelay.create<Packet>()
     private var operatingSystem: OperatingSystem? = null
+    private val logger: Logger
+
+    init {
+        logger = Logger.getLogger("com.rouddy.twophonesupporter")
+    }
 
     override fun onConnected(bluetoothDevice: BluetoothDevice) {
         super.onConnected(bluetoothDevice)
@@ -66,14 +74,18 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
                         if (packet == null) {
                             break
                         }
+                        logger.log("Received Packet : ${packet.size} : ${packet.type.name} : ${byteArray.sliceArray(0 until packet.size).hex()}")
                         receivedPacketRelay.accept(packet)
-                        byteArray = byteArray.sliceArray(packet.size until packet.size)
+                        byteArray = byteArray.sliceArray(packet.size until byteArray.size)
                     }
                     byteArray
                 }
             }
             .subscribe({
                 Log.e(LOG_TAG, "received data relay ${it.joinToString(separator = "") { String.format("%02x", it) }}")
+                if (it.size > 0) {
+                    logger.log("Received remnants : ${it.size} : ${it.hex()}")
+                }
             }, {
                 Log.e(LOG_TAG, "received data relay error", it)
             })
@@ -124,6 +136,9 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
             .apply { accept(1) }
         nextNotificationRelay = relay
         notificationDisposable = sendPacketRelay
+            .doOnNext {
+                logger.log("Send Packet : ${it.size} : ${it.type.name} : ${it.toByteArray().hex()}")
+            }
             .map { it.toByteArray() }
             .zipWith(relay) { byteArray, _ ->
                 byteArray
@@ -217,7 +232,6 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
 
     fun sendPacket(packet: Packet): Completable {
         return Completable.fromCallable {
-            Log.e("!!!", "packet:$packet")
             sendPacketRelay.accept(packet)
         }
     }

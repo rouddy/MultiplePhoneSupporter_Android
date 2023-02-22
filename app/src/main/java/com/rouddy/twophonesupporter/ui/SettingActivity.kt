@@ -13,6 +13,7 @@ class SettingActivity : AppCompatActivity(), SettingAdapter.Listener {
     enum class Settings(val text: String) {
         Connection("Connection"),
         NotificationFilter("Notification Filter"),
+        Log("Log"),
         Credit("Credit"),
     }
 
@@ -50,6 +51,11 @@ class SettingActivity : AppCompatActivity(), SettingAdapter.Listener {
             }
             Settings.NotificationFilter -> {
                 Intent(this, NotificationFilterActivity::class.java).also {
+                    startActivity(it)
+                }
+            }
+            Settings.Log -> {
+                Intent(this, LogActivity::class.java).also {
                     startActivity(it)
                 }
             }

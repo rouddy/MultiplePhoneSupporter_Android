@@ -19,6 +19,7 @@ import com.algorigo.library.rx.Rx2ServiceBindingFactory
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.jakewharton.rxrelay3.BehaviorRelay
+import com.jakewharton.rxrelay3.ReplayRelay
 import com.rouddy.twophonesupporter.BleAdvertiser
 import com.rouddy.twophonesupporter.BleGattServiceGenerator
 import com.rouddy.twophonesupporter.NotificationData
@@ -35,6 +36,11 @@ import io.reactivex.rxjava3.schedulers.Schedulers
 import io.reactivex.rxjava3.subjects.PublishSubject
 import io.reactivex.rxjava3.subjects.Subject
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.TimeUnit
+import java.util.logging.Handler
+import java.util.logging.Level
+import java.util.logging.LogRecord
+import java.util.logging.Logger
 import kotlin.math.roundToInt
 
 class BluetoothService : Service(), MyGattDelegate.Delegate {
@@ -94,6 +100,29 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
     }
     private lateinit var packageNameFilter: PackageNameFilter
     private val compositeDisposable = CompositeDisposable()
+    private val logger: Logger
+    private val logRelay = ReplayRelay.createWithSize<String>(255)
+
+    init {
+        logger = Logger.getLogger("com.rouddy.twophonesupporter")
+        logger.level = Level.ALL
+        logger.addHandler(object : Handler() {
+            override fun publish(p0: LogRecord?) {
+                p0?.message?.also {
+                    Log.e("!!!", "publish:$it\n")
+                    logRelay.accept(it)
+                }
+            }
+
+            override fun flush() {
+
+            }
+
+            override fun close() {
+
+            }
+        })
+    }
 
     override fun onCreate() {
         Log.e(LOG_TAG, "BluetoothService::onCreate")
@@ -202,6 +231,7 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
                         BleAdvertiser.startAdvertising(this, peripheralName)
                     }
                     is BleGattServiceGenerator.State.Connected -> {
+                        logger.log("Gatt Connected")
                         peripheralStateRelay.accept(PeripheralState.Connected)
                         Observable.empty()
                     }
@@ -332,6 +362,13 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
             .apply()
     }
 
+    fun getLogs(): Single<List<String>> {
+        return logRelay
+            .subscribeOn(Schedulers.io())
+            .take(1, TimeUnit.SECONDS)
+            .toList()
+    }
+
     override fun checkDeviceUuid(uuid: String): Boolean {
         return getSharedPreferences(SHARED_PREFERENCE_NAME, Context.MODE_PRIVATE)
             .run {
@@ -382,4 +419,14 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
         private const val NOTIFICATION_CHANNEL_ID_BLUETOOTH_SERVICE = "NotificationChannelIdBluetoothService"
         private const val NOTIFICATION_ID_BLUETOOTH_SERVICE = 0x01410
     }
+}
+
+fun Logger.log(message: String, exception: Exception = RuntimeException()) {
+    exception.stackTrace[1].also {
+        log(Level.ALL, "${it.fileName}(${it.lineNumber})\n$message")
+    }
+}
+
+fun ByteArray.hex(): String {
+    return "0x" + joinToString(separator = " ") { String.format("%02x", it) }
 }
