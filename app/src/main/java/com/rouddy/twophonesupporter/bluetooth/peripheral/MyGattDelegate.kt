@@ -104,6 +104,12 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
             .addTo(compositeDisposable)
     }
 
+    override fun onDisconnected() {
+        super.onDisconnected()
+        compositeDisposable.clear()
+        notificationDisposable?.dispose()
+    }
+
     override fun getCharacteris(): List<BluetoothGattCharacteristic> {
         return listOf(
             BluetoothGattCharacteristic(
@@ -131,6 +137,10 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
     }
 
     override fun startNotification(notificationType: BleGattServiceGenerator.NotificationType, device: BluetoothDevice, callback: (ByteArray) -> Unit) {
+        if (notificationDisposable != null) {
+            return
+        }
+
         val relay = BehaviorRelay
             .create<Any>()
             .apply { accept(1) }
