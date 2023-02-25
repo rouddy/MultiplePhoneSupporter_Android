@@ -200,7 +200,7 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
             addProperty("versionOk", centralVersion == VERSION)
             addProperty("peripheralId", address)
         }
-        val returnPacket = Packet(Packet.PacketType.CheckVersion, Gson().toJson(json).toByteArray().toList())
+        val returnPacket = Packet(Packet.PacketType.CheckVersionResponse, Gson().toJson(json).toByteArray().toList())
         sendPacketRelay.accept(returnPacket)
     }
 
@@ -214,7 +214,7 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
             addProperty("vaildDevice", certificated)
             addProperty("os", OperatingSystem.Android.byte)
         }
-        val returnPacket = Packet(Packet.PacketType.CheckDevice, Gson().toJson(json).toByteArray().toList())
+        val returnPacket = Packet(Packet.PacketType.CheckDeviceResponse, Gson().toJson(json).toByteArray().toList())
         sendPacketRelay.accept(returnPacket)
         if (!certificated) {
             Completable.timer(1, TimeUnit.SECONDS)

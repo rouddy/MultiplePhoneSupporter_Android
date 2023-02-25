@@ -1,18 +1,18 @@
 package com.rouddy.twophonesupporter.bluetooth
 
-import java.nio.ByteBuffer
-
 data class Packet(val type: PacketType, val data: List<Byte>) {
 
-    enum class PacketType(val rawValue: Short) {
-        CheckVersion(0x00),
-        CheckDevice(0x01),
-        ClearDevice(0x02),
-        Notification(0x10),
+    enum class PacketType(val rawValue: UShort) {
+        CheckVersion(0x00u),
+        CheckVersionResponse(0x01u),
+        CheckDevice(0x02u),
+        CheckDeviceResponse(0x03u),
+        Notification(0xf000u),
+        ClearDevice(0xffffu),
         ;
 
         companion object {
-            fun valueFor(rawValue: Short): PacketType? {
+            fun valueFor(rawValue: UShort): PacketType? {
                 return values().firstOrNull { it.rawValue == rawValue }
             }
         }
@@ -22,7 +22,7 @@ data class Packet(val type: PacketType, val data: List<Byte>) {
         get() = SizeSize + TypeSize + data.size
 
     fun toByteArray(): ByteArray {
-        return size.toShort().toByteArray() + type.rawValue.toByteArray() + data.toByteArray()
+        return size.toUShort().toByteArray() + type.rawValue.toByteArray() + data.toByteArray()
     }
 
     companion object {
@@ -40,12 +40,12 @@ data class Packet(val type: PacketType, val data: List<Byte>) {
                     val size = bytes
                         .subList(0, SizeSize)
                         .toByteArray()
-                        .toShort()
-                    if (bytes.size >= size) {
+                        .toUShort()
+                    if (bytes.size >= size.toInt()) {
                         val packetTypeShort = bytes
                             .subList(SizeSize, SizeSize + TypeSize)
                             .toByteArray()
-                            .toShort()
+                            .toUShort()
                         val data = bytes.subList(SizeSize + TypeSize, size.toInt())
                         PacketType
                             .valueFor(packetTypeShort)
@@ -60,14 +60,13 @@ data class Packet(val type: PacketType, val data: List<Byte>) {
     }
 }
 
-fun ByteArray.toShort(): Short {
+fun ByteArray.toUShort(): UShort {
     if (size != 2) {
         throw Exception("wrong len")
     }
-    reverse()
-    return ByteBuffer.wrap(this).short
+    return (this[0].toUInt() or (this[1].toUInt() shl 8)).toUShort()
 }
 
-fun Short.toByteArray(): ByteArray {
+fun UShort.toByteArray(): ByteArray {
     return byteArrayOf((toInt() and 0xff).toByte(), ((toInt() shr 8) and 0xff).toByte())
 }
