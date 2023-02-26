@@ -43,6 +43,8 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
     interface Delegate {
         fun checkDeviceUuid(uuid: String): Boolean
         fun clearDeviceUuid()
+        fun startRing()
+        fun stopRing()
     }
 
     private var notificationDisposable: Disposable? = null
@@ -186,6 +188,8 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
         when (packet.type) {
             Packet.PacketType.CheckVersion -> processVersion(packet.data)
             Packet.PacketType.CheckDevice -> processCheckDevice(packet.data)
+            Packet.PacketType.StartRing -> processStartRing()
+            Packet.PacketType.StopRing -> processStopRing()
             Packet.PacketType.ClearDevice -> processClearDevice()
             else -> {
 
@@ -225,6 +229,24 @@ class MyGattDelegate(private val delegate: Delegate) : BleGattServiceGenerator.G
                     Log.e(LOG_TAG, "timer error", it)
                 })
         }
+    }
+
+    private fun processStartRing() {
+        delegate.startRing()
+    }
+
+    private fun processStopRing() {
+        delegate.stopRing()
+    }
+
+    fun onStartRing() {
+        val returnPacket = Packet(Packet.PacketType.StartRingResponse, listOf())
+        sendPacketRelay.accept(returnPacket)
+    }
+
+    fun onStopRing() {
+        val returnPacket = Packet(Packet.PacketType.StopRingResponse, listOf())
+        sendPacketRelay.accept(returnPacket)
     }
 
     private fun processClearDevice() {

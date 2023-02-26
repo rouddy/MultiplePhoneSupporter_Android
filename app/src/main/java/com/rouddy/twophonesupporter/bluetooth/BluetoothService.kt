@@ -6,6 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.media.AudioManager
+import android.media.MediaPlayer
+import android.media.RingtoneManager
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -23,9 +26,10 @@ import com.jakewharton.rxrelay3.ReplayRelay
 import com.rouddy.twophonesupporter.BleAdvertiser
 import com.rouddy.twophonesupporter.BleGattServiceGenerator
 import com.rouddy.twophonesupporter.NotificationData
-import com.rouddy.twophonesupporter.ui.MainActivity
 import com.rouddy.twophonesupporter.R
 import com.rouddy.twophonesupporter.bluetooth.peripheral.MyGattDelegate
+import com.rouddy.twophonesupporter.ui.MainActivity
+import com.rouddy.twophonesupporter.util.AudioManagerFocusUtil
 import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
@@ -102,6 +106,7 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
     private val compositeDisposable = CompositeDisposable()
     private val logger: Logger
     private val logRelay = ReplayRelay.createWithSize<String>(255)
+    private var ringDisposable: Disposable? = null
 
     init {
         logger = Logger.getLogger("com.rouddy.twophonesupporter")
@@ -391,6 +396,51 @@ class BluetoothService : Service(), MyGattDelegate.Delegate {
                 remove(KEY_STORED_CENTRAL_DEVICE)
             }
             .apply()
+    }
+
+    override fun startRing() {
+        if (ringDisposable != null) {
+            return
+        }
+
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        var mediaPlayer: MediaPlayer? = null
+        var originalVolume: Int? = null
+        ringDisposable = Completable.timer(1, TimeUnit.SECONDS)
+            .andThen(AudioManagerFocusUtil.request(audioManager))
+            .flatMapSingle {
+                Completable.fromCallable {
+                    synchronized(this) {
+                        originalVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)/2, AudioManager.FLAG_SHOW_UI)
+                        val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+                        mediaPlayer = MediaPlayer.create(this, uri)
+                        mediaPlayer?.start()
+                        gattDelegate.onStartRing()
+                    }
+                }
+                    .andThen(Completable.timer(5, TimeUnit.SECONDS))
+                    .toSingleDefault(1)
+            }
+            .firstOrError()
+            .ignoreElement()
+            .doFinally {
+                synchronized(this) {
+                    ringDisposable = null
+                    mediaPlayer?.stop()
+                    gattDelegate.onStopRing()
+                }
+            }
+            .subscribe({
+                Log.e(LOG_TAG, "ring complete")
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, originalVolume!!, AudioManager.FLAG_SHOW_UI)
+            }, {
+                Log.e(LOG_TAG, "", it)
+            })
+    }
+
+    override fun stopRing() {
+        ringDisposable?.dispose()
     }
 
     companion object {

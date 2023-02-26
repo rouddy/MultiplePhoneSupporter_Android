@@ -7,6 +7,10 @@ data class Packet(val type: PacketType, val data: List<Byte>) {
         CheckVersionResponse(0x01u),
         CheckDevice(0x02u),
         CheckDeviceResponse(0x03u),
+        StartRing(0x04u),
+        StartRingResponse(0x05u),
+        StopRing(0x06u),
+        StopRingResponse(0x07u),
         Notification(0xf000u),
         ClearDevice(0xffffu),
         ;
